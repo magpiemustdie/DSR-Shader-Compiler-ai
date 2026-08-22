@@ -1,0 +1,55 @@
+# ── Build outputs ────────────────────────────────────────────────────────────
+bin/
+obj/
+*.fpo
+*.vpo
+*.cpo
+*.cod
+*.asm
+*.dcx
+*.dcx.bak
+*-shaderbnd-dcx/
+*-dcx/
+
+# ── IDE ──────────────────────────────────────────────────────────────────────
+.vscode/
+.vs/
+*.user
+
+# ── Game data (copyright FromSoftware — never publish) ───────────────────────
+reference/
+param/
+paramdef/
+shader/
+mtd/
+
+# ── Internal / dev-only directories ─────────────────────────────────────────
+build/
+docs/
+dsr-shader-mods-vanilla/
+archive_structures.json
+AGENTS.md
+
+# ── tools/ — only fxc_81 and fxc_new are public ─────────────────────────────
+# Exclude everything in tools/ by default, then re-include fxc_81 and fxc_new
+tools/*
+!tools/fxc_81/
+!tools/fxc_new/
+# But still exclude junk inside fxc dirs
+tools/fxc_81/*.fpo
+tools/fxc_81/*.vpo
+tools/fxc_81/*.asm
+tools/fxc_81/*.10
+tools/fxc_81/*.c
+tools/fxc_81/*.i64
+tools/fxc_new/*.fpo
+tools/fxc_new/*.vpo
+tools/fxc_new/*.asm
+
+# ── Python cache ─────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+
+# ── Makefile is internal (references local paths) ────────────────────────────
+Makefile
