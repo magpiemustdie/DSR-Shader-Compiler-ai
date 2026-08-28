@@ -140,13 +140,16 @@ float3 PerturbNormalSimple(float3 normal, float3 bumpN)
 
 float3 DetailBump(float2 baseUV)
 {
+    // ref: TWO dots — raw (pre-scale) drives the z-reconstruction, the SCALED
+    // vector drives the degenerate test; validity is ADDED to z (not a movc).
     float2 detailUV = baseUV * gFC_DetailBumpParam.x;
     float2 bump = g_tDetailBmpTex.Sample(g_sSmp15, detailUV).rg * 2.0 - 1.0;
+    float rawSq = dot(bump, bump);
     bump *= gFC_DetailBumpParam.w;
 
-    float lenSq = dot(bump, bump);
-    float z = lenSq < 0.00001 ? 1.0 : sqrt(1.0 - saturate(lenSq));
-    return normalize(float3(bump, z));
+    float z = sqrt(1.0f - saturate(rawSq));
+    float valid = (dot(bump, bump) < 0.00001f) ? 1.0f : 0.0f;
+    return normalize(float3(bump, z + valid));
 }
 
 //-----------------------------------------------------------------------------

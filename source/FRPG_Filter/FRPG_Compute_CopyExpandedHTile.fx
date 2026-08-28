@@ -4,13 +4,13 @@
 // Used for HTILE expansion after depth resolve.
 // t0=source HTile (Buffer<uint>), u0=dest HTile (RWBuffer<uint>)
 
-Buffer<uint>    t0 : register(t0);
-RWBuffer<uint>  u0 : register(u0);
+Buffer<uint>    htileSrc : register(t0);
+RWBuffer<uint>  htileDst : register(u0);
 
 [numthreads(64, 1, 1)]
 void ComputeMain(uint3 threadID : SV_DispatchThreadID)
 {
-    uint val = t0.Load(threadID.x);
+    uint val = htileSrc.Load(threadID.x);
     val |= 0xFu;
-    u0[threadID.x] = val;
+    htileDst[threadID.x] = val;
 }

@@ -2,17 +2,30 @@
 // Reconstructed from FRPG_Water_HeightMap.fpo.hlsl
 // Samples 3 height tiles and blends with depth fade.
 
-#include "FRPG_Water_Common.fxh"
+#include "FRPG_Water_FC.fxh"
+
+struct HM_IN {
+    float4 Pos  : SV_Position;
+    float4 TexA : TEXCOORD0;
+    float3 TexB : TEXCOORD1;
+};
+
+struct HM_OUT {
+    float4 Color : SV_Target0;
+};
+
+SamplerState gSMP_2Sampler : register(s2);
+Texture2D    gSMP_2        : register(t2);
 
 HM_OUT FragmentMain_WaterHeightMap(HM_IN In)
 {
-    float4 h0 = gSMP_HeightMap.Sample(gSMP_HeightMapSampler, In.TexA.zw);
+    float4 h0 = gSMP_2.Sample(gSMP_2Sampler, In.TexA.zw);
     float h0sum = dot(h0.xyz, 1.0f) * gFC_WaterTileBlend.y * (1.0f / 3.0f);
 
-    float4 h1 = gSMP_HeightMap.Sample(gSMP_HeightMapSampler, In.TexA.xy);
+    float4 h1 = gSMP_2.Sample(gSMP_2Sampler, In.TexA.xy);
     float h1sum = dot(h1.xyz, 1.0f) * gFC_WaterTileBlend.x * (1.0f / 3.0f);
 
-    float4 h2 = gSMP_HeightMap.Sample(gSMP_HeightMapSampler, In.TexB.xy);
+    float4 h2 = gSMP_2.Sample(gSMP_2Sampler, In.TexB.xy);
     float h2sum = dot(h2.xyz, 1.0f) * gFC_WaterTileBlend.z * (1.0f / 3.0f);
 
     float height = h0sum + h1sum + h2sum;

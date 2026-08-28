@@ -94,27 +94,27 @@ FIL_OUT FragmentMain(FIL_IN In)
         r3.w = gSMP_0.SampleLevel(gSMP_0Sampler, r5.xy, 0.0f).xzwy.w;
         r1.x = (r3.x != 0) ? r2.x : r1.x;
         r2.x = r2.z * 0.25f;
-        r2.z = -r1.x * 0.5f + r0.y;
+        r2.z = r0.y - r1.x * 0.5f;
         r1.w = r1.w * r3.y;
         r2.z = (float)(r2.z < 0.0f);
-        r3.x = -r1.x * 0.5f + r3.z;
-        r3.y = -r1.x * 0.5f + r3.w;
+        r3.x = r3.z - r1.x * 0.5f;
+        r3.y = r3.w - r1.x * 0.5f;
         r3.zw = (float2)(abs(r3.xy) >= r2.xx);
-        r4.z = -r2.y * 1.5f + r4.x;
+        r4.z = r4.x - r2.y * 1.5f;
         r4.x = (r3.z != 0) ? r4.x : r4.z;
-        r4.w = -r2.w * 1.5f + r4.y;
+        r4.w = r4.y - r2.w * 1.5f;
         r4.z = (r3.z != 0) ? r4.y : r4.w;
-        r4.yw = asfloat(~asuint(r3.zw));
-        r4.y = asfloat(asuint(r4.w) | asuint(r4.y));
         r4.w = r2.y * 1.5f + r5.x;
         r5.x = (r3.w != 0) ? r5.x : r4.w;
         r4.w = r2.w * 1.5f + r5.y;
         r5.z = (r3.w != 0) ? r5.y : r4.w;
 
-        static const float kSteps[4] = { 1.5f, 2.0f, 4.0f, 12.0f };
+        static const float kSteps[3] = { 2.0f, 4.0f, 12.0f };
         [unroll]
-        for (int iPass = 0; iPass < 4; iPass++)
+        for (int iPass = 0; iPass < 3; iPass++)
         {
+            r4.yw = asfloat(~asuint(r3.zw));
+            r4.y = asfloat(asuint(r4.w) | asuint(r4.y));
             if (r4.y)
             {
                 if (!r3.z)
@@ -124,19 +124,17 @@ FIL_OUT FragmentMain(FIL_IN In)
                     // t0.xyzw → green is .y
                     r3.y = gSMP_0.SampleLevel(gSMP_0Sampler, float2(r5.x, r5.z), 0.0f).y;
 
-                float r4y_tmp = -r1.x * 0.5f + r3.x;
+                float r4y_tmp = r3.x - r1.x * 0.5f;
                 r3.x = (r3.z != 0) ? r3.x : r4y_tmp;
-                float r3z_tmp = -r1.x * 0.5f + r3.y;
+                float r3z_tmp = r3.y - r1.x * 0.5f;
                 r3.y = (r3.w != 0) ? r3.y : r3z_tmp;
                 r3.zw = (float2)(abs(r3.xy) >= r2.xx);
 
                 float step = kSteps[iPass];
-                float r4y2 = -r2.y * step + r4.x;
+                float r4y2 = r4.x - r2.y * step;
                 r4.x = (r3.z != 0) ? r4.x : r4y2;
-                float r4y3 = -r2.w * step + r4.z;
+                float r4y3 = r4.z - r2.w * step;
                 r4.z = (r3.z != 0) ? r4.z : r4y3;
-                r4.yw = asfloat(~asuint(r3.zw));
-                r4.y = asfloat(asuint(r4.w) | asuint(r4.y));
                 float r4w2 = r2.y * step + r5.x;
                 r5.x = (r3.w != 0) ? r5.x : r4w2;
                 float r4w3 = r2.w * step + r5.z;

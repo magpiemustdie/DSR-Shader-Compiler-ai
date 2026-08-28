@@ -4,7 +4,7 @@
 
 #include "FRPG_Fil_Common.fxh"
 
-struct FIL_IN_NOUV { float4 Pos : SV_Position; };
+struct FIL_IN_NOUV { float4 Pos : SV_Position; float2 UV : TEXCOORD0; };
 struct FIL_OUT     { float4 Color : SV_Target0; };
 
 FIL_OUT FragmentMain(FIL_IN_NOUV In)

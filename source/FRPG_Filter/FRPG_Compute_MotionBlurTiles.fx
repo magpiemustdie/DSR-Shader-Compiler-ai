@@ -12,9 +12,9 @@ cbuffer Constants : register(b0)
     float4 cb0[11];
 }
 
-Texture2D<float4> t0 : register(t0);
-Texture2D<float4> t1 : register(t1);
-RWTexture2D<float4> u0 : register(u0);
+Texture2D<float2> velocityBuffer : register(t0);
+Texture2D<float> depthBuffer : register(t1);
+RWTexture2D<float2> outputTexture : register(u0);
 
 groupshared float2 g0[256];
 
@@ -29,7 +29,7 @@ void ComputeMain(
     uint2 r0xy = vThreadID.xy << 2u;  // base
 
     // ld t1.yzxw r1.z, r0.xyww  → depth0 = t1[base].x
-    float r1z = t1.Load(int3(r0xy, 0)).x;
+    float r1z = depthBuffer.Load(int3(r0xy, 0)).x;
 
     // utof r2.xy, r0.xyxx
     float2 r2xy = float2(r0xy);
@@ -57,7 +57,7 @@ void ComputeMain(
     r1.xy = r3.xy / r1.x * float2(0.5f, -0.5f) + 0.5f;
 
     // ld t0.xyzw r0.xy, r0.xyzw  → vel0 = t0[r0.xy].xy  (r0.xy reused!)
-    float2 r0xy_vel = t0.Load(int3(r0xy, 0)).xy;
+    float2 r0xy_vel = velocityBuffer.Load(int3(r0xy, 0)).xy;
 
     // lt r0.z, r0.x, l(1)
     bool ov0 = (r0xy_vel.x < 1.0f);
@@ -81,7 +81,7 @@ void ComputeMain(
     // --- Pixel 1: r1.zw = (base.x+2, base.y) ---
     // mov r2.xy, r1.zwzz; mov r2.zw, l(0,0,0,0)
     // ld t1.yzxw r3.z, r2.xyww
-    float r3z = t1.Load(int3(r1i.zw, 0)).x;
+    float r3z = depthBuffer.Load(int3(r1i.zw, 0)).x;
 
     // utof r4.xyzw, r1.zwxy  → r4.xy=float(p1=r1.zw), r4.zw=float(p2=r1.xy)
     float4 r4f = float4(float2(r1i.zw), float2(r1i.xy));
@@ -109,7 +109,7 @@ void ComputeMain(
     float2 r0zw = r5f.xy / r0z * float2(0.5f, -0.5f) + 0.5f;
 
     // ld t0.xyzw r2.xy, r2.xyzw
-    float2 vel1 = t0.Load(int3(r1i.zw, 0)).xy;
+    float2 vel1 = velocityBuffer.Load(int3(r1i.zw, 0)).xy;
     bool ov1 = (vel1.x < 1.0f);
     vel1 *= float2(1.0f, -1.0f);
 
@@ -134,7 +134,7 @@ void ComputeMain(
     uint2 r1i2 = r1i.xy;
 
     // ld t1.yzxw r2.z, r1.xyww
-    float r2z = t1.Load(int3(r1i2, 0)).x;
+    float r2z = depthBuffer.Load(int3(r1i2, 0)).x;
 
     // mul r2.xy, r5.zwzz, l(1,-1,0,0); mov r2.w, l(1)
     float4 r2f = float4(r5f.z, -r5f.w, r2z, 1.0f);
@@ -155,7 +155,7 @@ void ComputeMain(
     r0zw = r3f.xy / r0z * float2(0.5f, -0.5f) + 0.5f;
 
     // ld t0.xyzw r1.xy, r1.xyzw
-    float2 vel2 = t0.Load(int3(r1i2, 0)).xy;
+    float2 vel2 = velocityBuffer.Load(int3(r1i2, 0)).xy;
     bool ov2 = (vel2.x < 1.0f);
     vel2 *= float2(1.0f, -1.0f);
 
@@ -173,7 +173,7 @@ void ComputeMain(
     uint2 p3 = uint2(r0xy.x + 2u, r0xy.y + 2u);
 
     // ld t1.yzxw r2.z, r1.xyww
-    float d3 = t1.Load(int3(p3, 0)).x;
+    float d3 = depthBuffer.Load(int3(p3, 0)).x;
 
     // utof r0.zw, r1.xyxx
     float2 f3 = float2(p3);
@@ -200,7 +200,7 @@ void ComputeMain(
     float2 prevUV3 = r3f.xy / r2f.x * float2(0.5f, -0.5f) + 0.5f;
 
     // ld t0.xyzw r1.xy, r1.xyzw
-    float2 vel3 = t0.Load(int3(p3, 0)).xy;
+    float2 vel3 = velocityBuffer.Load(int3(p3, 0)).xy;
     bool ov3 = (vel3.x < 1.0f);
     vel3 *= float2(1.0f, -1.0f);
 
@@ -282,6 +282,6 @@ void ComputeMain(
         if (dot(f1r, f1r) > dot(final, final)) final = f1r;
         if (dot(f2r, f2r) > dot(final, final)) final = f2r;
         if (dot(f3r, f3r) > dot(final, final)) final = f3r;
-        u0[vThreadGroupID.xy] = float4(final, 0, 0);
+        outputTexture[vThreadGroupID.xy] = float4(final, 0, 0);
     }
 }

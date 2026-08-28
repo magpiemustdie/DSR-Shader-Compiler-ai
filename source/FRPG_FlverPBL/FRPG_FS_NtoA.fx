@@ -68,7 +68,8 @@ float3 CalcNtoAShadow(float4 posInLight, float4 clampRect, float eyeLen, float3 
     float bias = saturate((NdotL + gFC_ShadowMapParam.x) * gFC_ShadowMapParam.w);
     float slope = saturate((gFC_ShadowMapParam.y - eyeLen) * gFC_ShadowMapParam.z);
 
-    float3 uvw = posInLight.xyz / posInLight.w;
+    // ref divides the CLAMPED xy by w (unclamped here -> clamp dies in DCE)
+    float3 uvw = float3(posXY, posInLight.z) / posInLight.w;
 
     float4 s01 = float4(
         gSMP_ShadowMap.SampleCmp(gSMP_ShadowMapSampler, uvw.xy, uvw.z, int2(-1, -1)),
@@ -80,8 +81,8 @@ float3 CalcNtoAShadow(float4 posInLight, float4 clampRect, float eyeLen, float3 
         gSMP_ShadowMap.SampleCmp(gSMP_ShadowMapSampler, uvw.xy, uvw.z, int2( 1,  0)),
         gSMP_ShadowMap.SampleCmp(gSMP_ShadowMapSampler, uvw.xy, uvw.z, int2(-1,  1)),
         gSMP_ShadowMap.SampleCmp(gSMP_ShadowMapSampler, uvw.xy, uvw.z, int2( 0,  1)));
-    float s = dot(s01, 0.111111f) + dot(s23, 0.111111f)
-            + 0.111111f * gSMP_ShadowMap.SampleCmp(gSMP_ShadowMapSampler, uvw.xy, uvw.z, int2( 1,  1));
+    float s = dot(s01, 0.111111112f) + dot(s23, 0.111111112f)
+            + 0.111111112f * gSMP_ShadowMap.SampleCmp(gSMP_ShadowMapSampler, uvw.xy, uvw.z, int2( 1,  1));
 
     s += bias;
     s = min(s, 1.0f);

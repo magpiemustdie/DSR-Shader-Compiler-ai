@@ -23,11 +23,17 @@
 //   o0 = r0 / r2_final  (no zero-guard on final div, matches DXBC)
 
 #include "FRPG_Fil_Common.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
 
 struct FIL_IN_GAUSS
 {
     float4 Pos : SV_Position;
-    float2 UV  : TEXCOORD0;
+    float4 UV  : TEXCOORD0;
     float4 UV2 : TEXCOORD1;
     float4 UV3 : TEXCOORD2;
     float4 UV4 : TEXCOORD3;

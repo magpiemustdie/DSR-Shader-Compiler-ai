@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
@@ -16,6 +16,6 @@
     <Compile Remove="../tools/TranslatorTest/**" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\source\repos\SoulsFormatsNEXT\SoulsFormats\SoulsFormats.csproj" />
+    <ProjectReference Include="..\SoulsFormatsNEXT\SoulsFormats\SoulsFormats.csproj" />
   </ItemGroup>
 </Project>

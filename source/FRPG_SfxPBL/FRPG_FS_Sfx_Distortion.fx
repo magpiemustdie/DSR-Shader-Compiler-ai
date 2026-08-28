@@ -1,4 +1,4 @@
-// FRPG_FS_Sfx_Distortion.fx — SFX Distortion pixel shaders (DistortionType0-5)
+// FRPG_FS_Sfx_Distortion.fx вЂ” SFX Distortion pixel shaders (DistortionType0-5)
 // Reconstructed from DSR DXBC (FRPG_SfxPBL_DX11)
 // Compile: /E FragmentMain /T ps_5_0 /DDISTORTION_TYPE=0..5
 //
@@ -29,12 +29,24 @@ float4 g_Distortion_light_1_dir : register(c15);
 float4 g_Distortion_light_2_dir : register(c16);
 float4 g_DistortionColor : register(c17);
 
-Texture2D    gSMP_1 : register(t1);              // NormalSampler
-SamplerState gSMP_1Sampler : register(s1);
-Texture2D    gSMP_2 : register(t2);              // DistortionColor tex (Type4/5)
-SamplerState gSMP_2Sampler : register(s2);
-Texture2D    gSMP_3 : register(t3);              // RefSampler (Type2)
-SamplerState gSMP_3Sampler : register(s3);
+#if DISTORTION_TYPE == 1 || DISTORTION_TYPE == 2 || DISTORTION_TYPE == 5
+Texture2D    NormalSampler        : register(t1);
+SamplerState NormalSamplerSampler : register(s1);
+#define gSMP_1        NormalSampler
+#define gSMP_1Sampler NormalSamplerSampler
+#endif
+#if DISTORTION_TYPE == 4 || DISTORTION_TYPE == 5
+Texture2D    DistortionColorSampler        : register(t2);
+SamplerState DistortionColorSamplerSampler : register(s2);
+#define gSMP_2        DistortionColorSampler
+#define gSMP_2Sampler DistortionColorSamplerSampler
+#endif
+#if DISTORTION_TYPE == 2
+Texture2D    RefSampler        : register(t3);
+SamplerState RefSamplerSampler : register(s3);
+#define gSMP_3        RefSampler
+#define gSMP_3Sampler RefSamplerSampler
+#endif
 
 struct DS_PS_IN
 {
@@ -47,8 +59,9 @@ struct DS_PS_IN
 
 float4 SfxDistortionTail(float4 col, float4 V3)
 {
-    float4 Out = col * V3.w + V3.z * col;
-    if (AlphaTest == 1 && AlphaTestRef.x >= Out.w) discard;
+    // term order matches ref codegen: mul(col*V3.w) first, then mad(V3.z, col, +)
+    float4 Out = V3.z * col + col * V3.w;
+    if (AlphaTestRef.x >= Out.w) { if (AlphaTest == 1) discard; }
     return Out;
 }
 

@@ -1,30 +1,52 @@
-// FRPG_FS_Sfx_SimpleSprite.fx — SFX SimpleSprite pixel shaders (SimpleSpriteType0-8)
+// FRPG_FS_Sfx_SimpleSprite.fx вЂ” SFX SimpleSprite pixel shaders (SimpleSpriteType0-8)
 // Reconstructed from DSR DXBC (FRPG_SfxPBL_DX11)
 // Compile: /E FragmentMain /T ps_5_0 /DSIMPLE_SPRITE_TYPE=0..8
 //
 // Feature matrix:
-//   Type0: multi-tex (t0 x2, blend TEXCOORD4)                  — fog c4, rim c7
-//   Type1: multi-tex + light (t1 normal, c1/c2/c3)             — fog/rim
-//   Type2: multi-tex + depth fade (t2, screen-proj, c0/c32)    — fog/rim
-//   Type3: multi-tex + light + depth                           — fog/rim
-//   Type4: single texture (no blend)                           — fog/rim
-//   Type5: tex pair (t1 x t3)                                  — fog/rim
-//   Type6: tex pair + depth                                    — fog/rim
-//   Type7: t1 only (no t3)                                     — fog/rim
-//   Type8: t1 only + depth                                     — fog/rim
+//   Type0: multi-tex (t0 x2, blend TEXCOORD4)                  вЂ” fog c4, rim c7
+//   Type1: multi-tex + light (t1 normal, c1/c2/c3)             вЂ” fog/rim
+//   Type2: multi-tex + depth fade (t2, screen-proj, c0/c32)    вЂ” fog/rim
+//   Type3: multi-tex + light + depth                           вЂ” fog/rim
+//   Type4: single texture (no blend)                           вЂ” fog/rim
+//   Type5: tex pair (t1 x t3)                                  вЂ” fog/rim
+//   Type6: tex pair + depth                                    вЂ” fog/rim
+//   Type7: t1 only (no t3)                                     вЂ” fog/rim
+//   Type8: t1 only + depth                                     вЂ” fog/rim
 
 #ifndef SIMPLE_SPRITE_TYPE
 #define SIMPLE_SPRITE_TYPE 0
 #endif
 #define SFXPBL_HAS_ALPHATEST
+#define SFXPBL_C4_IS_DL_FREG_004
 #include "FRPG_SfxPBL_Common.fxh"
 
-Texture2D    gSMP_1 : register(t1);
-SamplerState gSMP_1Sampler : register(s1);
-Texture2D    gSMP_2 : register(t2);
-SamplerState gSMP_2Sampler : register(s2);
-Texture2D    gSMP_3 : register(t3);
-SamplerState gSMP_3Sampler : register(s3);
+// Slot 1..3 resource names vary per type in the reference:
+//   t1: NormalSampler (1,3) | MultiAlphaSampler0 (5-8)
+//   t2: DepthTexSampler (2,3,6,8)
+//   t3: MultiAlphaSampler1 (5,6)
+#if SIMPLE_SPRITE_TYPE == 1 || SIMPLE_SPRITE_TYPE == 3
+Texture2D    NormalSampler        : register(t1);
+SamplerState NormalSamplerSampler : register(s1);
+#define gSMP_1        NormalSampler
+#define gSMP_1Sampler NormalSamplerSampler
+#elif SIMPLE_SPRITE_TYPE >= 5
+Texture2D    MultiAlphaSampler0        : register(t1);
+SamplerState MultiAlphaSampler0Sampler : register(s1);
+#define gSMP_1        MultiAlphaSampler0
+#define gSMP_1Sampler MultiAlphaSampler0Sampler
+#endif
+#if SIMPLE_SPRITE_TYPE == 2 || SIMPLE_SPRITE_TYPE == 3 || SIMPLE_SPRITE_TYPE == 6 || SIMPLE_SPRITE_TYPE == 8
+Texture2D    DepthTexSampler        : register(t2);
+SamplerState DepthTexSamplerSampler : register(s2);
+#define gSMP_2        DepthTexSampler
+#define gSMP_2Sampler DepthTexSamplerSampler
+#endif
+#if SIMPLE_SPRITE_TYPE == 5 || SIMPLE_SPRITE_TYPE == 6
+Texture2D    MultiAlphaSampler1        : register(t3);
+SamplerState MultiAlphaSampler1Sampler : register(s3);
+#define gSMP_3        MultiAlphaSampler1
+#define gSMP_3Sampler MultiAlphaSampler1Sampler
+#endif
 
 // Shared tail: fog + alpha + rim + gamma + alpha test + tone
 float4 SfxSpriteTail(float4 dif, float2 fog, float3 rim1, float3 rim2, float4 rimUV)
@@ -33,7 +55,7 @@ float4 SfxSpriteTail(float4 dif, float2 fog, float3 rim1, float3 rim2, float4 ri
     float alpha = dif.w * (1.0f - fog.x * g_fog_color.w);
     float3 rimA = fogged.xyz * rim1 + rim2;
     float4 Out = mad(DL_FREG_7.x, float4(rimA - fogged.xyz, 0.0f), float4(fogged, alpha));
-    if (AlphaTest == 1 && AlphaTestRef.x >= Out.w) discard;
+    if (AlphaTestRef.x >= Out.w) { if (AlphaTest == 1) discard; }
     Out.xyz = pow(abs(Out.xyz), 2.2f);
     return SfxToneMap(Out);
 }
@@ -82,7 +104,7 @@ float4 FragmentMain(SS_PS_IN In) : SV_Target0
     float alpha = dif.w * (1.0f - In.TexUV.z * g_fog_color.w);
     float3 rimA = fogged.xyz * In.Rim1.xyz + In.Rim2.xyz;
     float4 Out = mad(DL_FREG_7.x, float4(rimA - fogged.xyz, 0.0f), float4(fogged, alpha));
-    if (AlphaTest == 1 && AlphaTestRef.x >= Out.w) discard;
+    if (AlphaTestRef.x >= Out.w) { if (AlphaTest == 1) discard; }
     Out.xyz = pow(abs(Out.xyz), 2.2f);
     return SfxToneMap(Out);
 }
@@ -141,7 +163,7 @@ float4 FragmentMain(SS_PS_IN In) : SV_Target0
     float alpha = dif.w * (1.0f - In.TexUV.z * g_fog_color.w);
     float3 rimA = fogged.xyz * In.Rim1.xyz + In.Rim2.xyz;
     float4 Out = mad(DL_FREG_7.x, float4(rimA - fogged.xyz, 0.0f), float4(fogged, alpha));
-    if (AlphaTest == 1 && AlphaTestRef.x >= Out.w) discard;
+    if (AlphaTestRef.x >= Out.w) { if (AlphaTest == 1) discard; }
     Out.xyz = pow(abs(Out.xyz), 2.2f);
     return SfxToneMap(Out);
 }
@@ -183,7 +205,7 @@ float4 FragmentMain(SS_PS_IN In) : SV_Target0
     float alpha = col4.w * (1.0f - In.Tex1.z * g_fog_color.w);
     float3 rimA = fogged.xyz * In.Rim1.xyz + In.Rim2.xyz;
     float4 Out = mad(DL_FREG_7.x, float4(rimA - fogged.xyz, 0.0f), float4(fogged, alpha));
-    if (AlphaTest == 1 && AlphaTestRef.x >= Out.w) discard;
+    if (AlphaTestRef.x >= Out.w) { if (AlphaTest == 1) discard; }
     Out.xyz = pow(abs(Out.xyz), 2.2f);
     return SfxToneMap(Out);
 }
@@ -214,7 +236,7 @@ float4 FragmentMain(SS_PS_IN In) : SV_Target0
     float alpha = col4.w * (1.0f - In.Tex1.z * g_fog_color.w);
     float3 rimA = fogged.xyz * In.Rim1.xyz + In.Rim2.xyz;
     float4 Out = mad(DL_FREG_7.x, float4(rimA - fogged.xyz, 0.0f), float4(fogged, alpha));
-    if (AlphaTest == 1 && AlphaTestRef.x >= Out.w) discard;
+    if (AlphaTestRef.x >= Out.w) { if (AlphaTest == 1) discard; }
     Out.xyz = pow(abs(Out.xyz), 2.2f);
     return SfxToneMap(Out);
 }
@@ -239,7 +261,7 @@ float4 FragmentMain(SS_PS_IN In) : SV_Target0
     float alpha = col4.w * (1.0f - In.Fog.x * g_fog_color.w);
     float3 rimA = fogged.xyz * In.Rim1.xyz + In.Rim2.xyz;
     float4 Out = mad(DL_FREG_7.x, float4(rimA - fogged.xyz, 0.0f), float4(fogged, alpha));
-    if (AlphaTest == 1 && AlphaTestRef.x >= Out.w) discard;
+    if (AlphaTestRef.x >= Out.w) { if (AlphaTest == 1) discard; }
     Out.xyz = pow(abs(Out.xyz), 2.2f);
     return SfxToneMap(Out);
 }
@@ -269,7 +291,7 @@ float4 FragmentMain(SS_PS_IN In) : SV_Target0
     float alpha = col4.w * (1.0f - In.Fog.x * g_fog_color.w);
     float3 rimA = fogged.xyz * In.Rim1.xyz + In.Rim2.xyz;
     float4 Out = mad(DL_FREG_7.x, float4(rimA - fogged.xyz, 0.0f), float4(fogged, alpha));
-    if (AlphaTest == 1 && AlphaTestRef.x >= Out.w) discard;
+    if (AlphaTestRef.x >= Out.w) { if (AlphaTest == 1) discard; }
     Out.xyz = pow(abs(Out.xyz), 2.2f);
     return SfxToneMap(Out);
 }

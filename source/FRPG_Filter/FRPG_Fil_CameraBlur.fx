@@ -76,9 +76,10 @@ FIL_OUT FragmentMain(FIL_IN In)
     for (int i = 0; i < 7; i++)
     {
         float2 sUV = motion * tvals[i] + In.UV;
+        // ref depth-tests each tap against the COLOR sample's alpha channel
+        // (t0.w), not a separate t1 fetch
         float4 s   = gSMP_0.Sample(gSMP_0Sampler, sUV);
-        float  sd  = gSMP_1.Sample(gSMP_1Sampler, sUV).r;
-        float  w   = (float)(sd >= centerDepth) * weights[i];
+        float  w   = (float)(s.w >= centerDepth) * weights[i];
         acc    += float4(s.rgb * w, w);
         totalW += w;
     }

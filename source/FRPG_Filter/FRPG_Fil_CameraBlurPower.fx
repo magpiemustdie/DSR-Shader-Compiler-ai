@@ -6,6 +6,7 @@
 // Output: (key / (depth*scale + bias)) * (1/32)
 
 #include "FRPG_Fil_Common.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
 
 struct FIL_OUT { float4 Color : SV_Target0; };
 

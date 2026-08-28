@@ -21,10 +21,21 @@
 #define SFXPBL_HAS_ALPHATEST
 #include "FRPG_SfxPBL_Common.fxh"
 
-Texture2D    gSMP_1 : register(t1);
-SamplerState gSMP_1Sampler : register(s1);
-Texture2D    gSMP_3 : register(t3);
-SamplerState gSMP_3Sampler : register(s3);
+// Slot 1..3 names per reference: t1 = MultiAlphaSampler0 (5,7), NormalSampler (3
+// is binary-identical to SimpleSpriteType3 and builds from the other file);
+// t3 = MultiAlphaSampler1 (5). Depth2/3/6/8 come from FRPG_FS_Sfx_SimpleSprite.fx.
+#if DEPTH_SPRITE_TYPE == 5 || DEPTH_SPRITE_TYPE == 7
+Texture2D    MultiAlphaSampler0        : register(t1);
+SamplerState MultiAlphaSampler0Sampler : register(s1);
+#define gSMP_1        MultiAlphaSampler0
+#define gSMP_1Sampler MultiAlphaSampler0Sampler
+#endif
+#if DEPTH_SPRITE_TYPE == 5
+Texture2D    MultiAlphaSampler1        : register(t3);
+SamplerState MultiAlphaSampler1Sampler : register(s3);
+#define gSMP_3        MultiAlphaSampler1
+#define gSMP_3Sampler MultiAlphaSampler1Sampler
+#endif
 
 #if DEPTH_SPRITE_TYPE == 0
 struct SD_PS_IN

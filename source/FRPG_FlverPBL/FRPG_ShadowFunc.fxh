@@ -487,6 +487,22 @@ float3 CalcGetShadowRateWorldSpaceNoCsd(float4 worldspace_Pos, float3 normal, fl
     return CalcGetShadowRate(position_in_light, normal, eyeVec);
 }
 
+// Non family: multi-cascade select, but WITHOUT the clamp-rect wrap that the
+// generic path applies (ref Non PCF skips it — the cascade matrix already bounds UVs).
+float3 CalcGetShadowRateWorldSpaceNon(float4 worldspace_Pos, float3 normal, float4 eyeVec = 0)
+{
+    float4x4 shadowMtx;
+    float  viewZ  = worldspace_Pos.w;
+    float4 zGreater = (gFC_ShadowStartDist < viewZ);
+    int slice = (int)(dot(zGreater, 1.0f) - 1.0f);
+    shadowMtx  = gFC_ShadowMapMtxArray[slice];
+
+    float4 worldPos          = float4(worldspace_Pos.xyz, 1.0f);
+    float4 position_in_light = mul(worldPos, shadowMtx);
+
+    return CalcGetShadowRate(position_in_light, normal, eyeVec);
+}
+
 #define GetShadowRate_Cube(a) (1)
 #define GetShadowRate_Proj(a) float3(1, 0, 1) // do not use — debug color
 

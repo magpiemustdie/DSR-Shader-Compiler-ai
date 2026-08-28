@@ -179,7 +179,9 @@ namespace ShaderCompiler
         static void AddSufDefs(List<string> d, string suf)
         {
             // Mirror Makefile add_variant rules (lines 164-174)
-            if (suf.Contains("Lerp")) d.Add("WITH_EnvLerp");
+            // ref: _HemEnvLerpPntS is BINARY-EQUAL to _HemEnvPntS (no second
+            // cube pair) — same precedent as LerpParallax == LerpSubsurf
+            if (suf.Contains("Lerp") && !suf.EndsWith("LerpPntS")) d.Add("WITH_EnvLerp");
             if (suf.Contains("HemEnvParallax")) d.Add("WITH_Parallax");
             else if (suf.Contains("LerpParallax")) d.Add("FS_SUBSURF"); // ref: LerpParallax = LerpSubsurf
             if (suf.Contains("PntSSSS"))
@@ -302,7 +304,7 @@ namespace ShaderCompiler
             {
                 string base_ = "Dif" + Slot(spc) + Slot(bmp) + Slot(mul) + Slot(lit) + Slot(sdw);
                 var bd = new List<string> { "_WIN32=1","_FRAGMENT_SHADER=1","_DX11=1",
-                                            "WITHOUT_DETAILBUMP" };
+                                            "WITHOUT_DETAILBUMP=1" };
                 if (spc == "Spc") bd.Add("WITH_SpecularMap");
                 if (bmp == "Bmp") bd.Add("WITH_BumpMap");
                 if (mul == "Mul") bd.Add("WITH_MultiTexture");
@@ -310,8 +312,10 @@ namespace ShaderCompiler
                 if (sdw == "Sdw") bd.Add("WITH_ShadowMap=1");
                 if (sdw == "Csd") bd.Add("WITH_ShadowMap=2");
                 // ref has _Non only for Phn and Sfx (no Gst_*_Non)
+                // build_non.py: Sfx gets WITH_Glow (gates tone-map block), Gst gets WITH_GhostMap
                 jobs.Add((Path.Combine(FLVER_OUT, $"FRPG_Phn_{base_}_Non.fpo"), bd.ToArray()));
-                jobs.Add((Path.Combine(FLVER_OUT, $"FRPG_Sfx_{base_}_Non.fpo"), bd.ToArray()));
+                jobs.Add((Path.Combine(FLVER_OUT, $"FRPG_Sfx_{base_}_Non.fpo"),
+                          bd.Concat(new[]{"WITH_Glow"}).ToArray()));
             }
             RunParallel(jobs, Path.Combine(SRC, "FRPG_FS_Non.fx"), "FragmentMain", "ps_5_0");
         }
@@ -400,7 +404,7 @@ namespace ShaderCompiler
         {
             Log("Building WWS...");
             string[] d = { "_WIN32=1","_FRAGMENT_SHADER=1","_DX11=1" };
-            string src = Path.Combine(SRC, "FRPG_WWS_WaterWave.fx");
+            string src = Path.Combine(SRC, "FRPG_WWS_WaterWave_new.fx");
             var jobs = new List<(string output, string[] defines)>
             {
                 (Path.Combine(FLVER_OUT, "FRPG_WWS_Dif________________WaterWave.fpo"), d),
@@ -542,7 +546,9 @@ namespace ShaderCompiler
             var gbJobs = new List<(string output, string[] defines)>();
             void G(string fam, string name, params string[] extra)
                 => gbJobs.Add((Path.Combine(FLVER_OUT, $"FRPG_{fam}_FaceEye{name}.fpo"),
-                               d.Concat(new[]{"WITH_PntS","WITH_GBuffer","OLD_VERSION=1","USE_SH=1"}).Concat(extra).ToArray()));
+                               d.Concat(new[]{"WITH_PntS","WITH_GBuffer","OLD_VERSION=1","USE_SH=1"})
+                                .Concat(name.Contains("PntSSSS") ? new[]{"WITH_GBUFFER_4LIGHTS"} : Array.Empty<string>())
+                                .Concat(extra).ToArray()));
             G("Phn", "____PntSS");
             G("Phn", "____PntSSSS");
             G("Phn", "_SdwPntSS", "WITH_ShadowMap=1");
@@ -605,8 +611,10 @@ namespace ShaderCompiler
             Compile(Path.Combine(FIL, "FRPG_Fil_Quad_GaussY.fx"), Path.Combine(FIL_OUT, "FRPG_Fil_Dof_GaussY.vpo"),        "VertexMain", "vs_5_0", d);
             Compile(Path.Combine(FIL, "FRPG_Fil_Quad_GaussX.fx"), Path.Combine(FIL_OUT, "FRPG_Fil_Dof_StretchAlphaX.vpo"), "VertexMain", "vs_5_0", d);
             Compile(Path.Combine(FIL, "FRPG_Fil_Quad_GaussY.fx"), Path.Combine(FIL_OUT, "FRPG_Fil_Dof_StretchAlphaY.vpo"), "VertexMain", "vs_5_0", d);
+            // Dof_CB.vpo == Dof.vpo byte-equal pair (ref) — same KIND0 VS with two TEXCOORD outputs
+            Compile(Path.Combine(FIL, "FRPG_Fil_Dof_VS.fx"), Path.Combine(FIL_OUT, "FRPG_Fil_Dof_CB.vpo"), "VertexMain", "vs_5_0", d);
             // Quad VS for DOF pixel shaders (simple passthrough)
-            foreach (var name in new[]{ "FRPG_Fil_Dof_CB","FRPG_Fil_Dof_DofRate","FRPG_Fil_Dof_DofRate_CB",
+            foreach (var name in new[]{ "FRPG_Fil_Dof_DofRate","FRPG_Fil_Dof_DofRate_CB",
                 "FRPG_Fil_Dof_DownSample","FRPG_Fil_Dof_NearRate","FRPG_Fil_Dof_WeightedDownsample" })
                 Compile(Path.Combine(FIL, "FRPG_Fil_Quad.fx"), Path.Combine(FIL_OUT, $"{name}.vpo"), "VertexMain", "vs_5_0", d);
             // Special VS with UV offsets for multi-tap DOF shaders
@@ -636,8 +644,10 @@ namespace ShaderCompiler
             Compile(Path.Combine(FIL, "FRPG_Fil_DownScale.fx"),                Path.Combine(FIL_OUT, "FRPG_Fil_DownScale4x4.fpo"),             "FragmentMain_4x4","ps_5_0", d);
             Compile(Path.Combine(FIL, "FRPG_Fil_LightShaft.fx"),               Path.Combine(FIL_OUT, "FRPG_Fil_LightShaft.fpo"),               "FragmentMain",    "ps_5_0", d);
             Compile(Path.Combine(FIL, "FRPG_Fil_Sfx_Glow_Blur.fx"),            Path.Combine(FIL_OUT, "FRPG_Fil_Sfx_Glow_Blur.fpo"),            "FragmentMain",    "ps_5_0", d);
-            foreach (var name in new[]{ "FRPG_Fil_HDR_ColAdj","FRPG_Fil_HDR_Menu","FRPG_Fil_HDR_PBL","FRPG_Fil_HDR_PBL_ColAdj","FRPG_Fil_HDR" })
+            foreach (var name in new[]{ "FRPG_Fil_HDR_ColAdj","FRPG_Fil_HDR_PBL","FRPG_Fil_HDR_PBL_ColAdj","FRPG_Fil_HDR" })
                 Compile(Path.Combine(FIL, "FRPG_Fil_HDR_VS.fx"), Path.Combine(FIL_OUT, $"{name}.vpo"), "VertexMain", "vs_5_0", d);
+            // HDR_Menu VS is a PLAIN quad (no cb0[68] noise UV) - separate source
+            Compile(Path.Combine(FIL, "FRPG_Fil_HDR_Menu_VS.fx"), Path.Combine(FIL_OUT, "FRPG_Fil_HDR_Menu.vpo"), "VertexMain", "vs_5_0", d);
         }
 
         public void BuildFilterMotionBlur()
@@ -709,7 +719,7 @@ namespace ShaderCompiler
         public void BuildFilterVs()
         {
             Log("Building Filter/VS (Quad)...");
-            string[] d = { "_WIN32=1","_FRAGMENT_SHADER=1","_DX11=1" };
+            string[] d = { "_WIN32=1","_VERTEX_SHADER=1","_DX11=1" };
 
             // Standard quad VS (SV_VertexID, TEXCOORD0)
             string[] vsQuad = new[] { "FRPG_Fil_Quad", "FRPG_Fil_Bilateral", "FRPG_Fil_CameraBlur",
@@ -1492,16 +1502,14 @@ namespace ShaderCompiler
                 string rest = vpoName.Substring(fam.Length + 1).Replace(".vpo", "");
                 DecodeVpoDefines(defines, rest, fam, vpoName);
 
-                // PntNum: no ClipPlane, no extra vtx defines
+                // PntNum: no ClipPlane (ref SHEX has no clip outputs), but KEEP vtx
+                // family defines — ref ISGN retains full family input signature
+                // (TANGENT/BINORMAL/UV present even though the PntNum branch
+                // never reads them; fxc keeps declared struct members in ISGN).
                 if (vpoName.Contains("_PntNum"))
                 {
                     defines.RemoveAll(d => d == "WITH_ClipPlane");
-                    bool hasSkin = defines.Contains("WITH_Skin");
-                    defines.RemoveAll(d => d != "_WIN32=1" && d != "_DX11=1" &&
-                                          d != "WITH_Skin" && d != "WITH_NtoA" &&
-                                          d != "WITH_GhostMap");
                     defines.Add("WITH_PntNum=1");
-                    if (!hasSkin) defines.RemoveAll(d => d == "WITH_Skin");
                 }
 
                 string vsSrc = Path.Combine(SRC, fxFile);
@@ -1537,6 +1545,8 @@ namespace ShaderCompiler
                 else if (rest.Contains("PIWN"))     d.Add("WITH_Skin");
                 else if (rest.Contains("PINTT"))  { d.Add("WITH_BumpMap"); d.Add("WITH_MultiTexture"); }
                 else if (rest.Contains("PINT"))     d.Add("WITH_BumpMap");
+                // Ghost_Skin: name suffix carries skin flag instead of vtx type
+                if (fam == "FRPG_Ghost" && rest.Contains("Skin")) d.Add("WITH_Skin");
                 // TexCfg
                 if      (rest.Contains("_DDL_") || rest.EndsWith("_DDL")) { d.Add("WITH_MultiTexture"); d.Add("WITH_LightMap"); }
                 else if (rest.Contains("_DD_")  || rest.EndsWith("_DD"))    d.Add("WITH_MultiTexture");
@@ -1570,7 +1580,9 @@ namespace ShaderCompiler
             }
             else if (fam == "FRPG_Dbg_Snow")
             {
-                if (rest.Contains("_DL_") || rest.EndsWith("_DL")) d.Add("WITH_LightMap");
+                // note: rest may START with the tex cfg ("DL_Nrm"), so pad it
+                string r = "_" + rest;
+                if (r.Contains("_DL_")) d.Add("WITH_LightMap");
                 if (name.Contains("Skin")) d.Add("WITH_Skin");
             }
             else if (fam == "FRPG_Water")

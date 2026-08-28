@@ -151,12 +151,12 @@ ALPHA_OUT FragmentMain(VTX_OUT In)
 	float specLevel = pblParams.z;
 
 #ifdef WITH_MultiTexture
-	{
+{
 		float4 difSample1 = TexDiff(difTexUV.xy);
 		float4 difSample2 = TexDiff2(difTexUV.zw);
 		difSample2.rgb += gFC_FgSkinAddColor.rgb;
 		dif0.rgb = lerp(difSample1.rgb, difSample2.rgb, In.ColVtx.a);
-		dif0.w = 1.0f;
+		dif0.w = lerp(gFC_DifMapMulCol.a, gFC_SpcMapMulCol.a, metalness) * gFC_ModelMulCol.a;
 		dif0.xyz *= In.ColVtx.xyz;
 	}
 #else
@@ -166,12 +166,12 @@ ALPHA_OUT FragmentMain(VTX_OUT In)
 #endif
 #else
 #ifdef WITH_MultiTexture
-	{
+{
 		float4 difSample1 = TexDiff(difTexUV.xy);
 		float4 difSample2 = TexDiff2(difTexUV.zw);
 		difSample2.rgb += gFC_FgSkinAddColor.rgb;
 		dif0.rgb = lerp(difSample1.rgb, difSample2.rgb, In.ColVtx.a);
-		dif0.w = 1.0f;
+		dif0.w = gFC_DifMapMulCol.a * gFC_ModelMulCol.a;
 		dif0.xyz *= In.ColVtx.xyz;
 	}
 #else
@@ -364,6 +364,19 @@ ALPHA_OUT FragmentMain(VTX_OUT In)
 		}
 #endif
 	}
+
+#ifdef WITH_GhostMap
+	{//Ghost light: simple falloff + NdotL + pow(ndl, c102.x), no D/Fresnel cycle (ref GB/Alp pattern)
+		float3 L = gFC_GhostLightPos.xyz - In.VtxWld.xyz;
+		float distL = length(L);
+		L /= distL;
+		float distFade = saturate((gFC_GhostLightCol.w - distL) * gFC_GhostLightPos.w);
+		float3 ghostLight = distFade * gFC_GhostLightCol.rgb;
+		float ndl = max(dot(L, N), 0);
+		dirLight += ghostLight * ndl;
+		dirLight += ghostLight * pow(ndl, gFC_SpcParam.x);
+	}
+#endif
 
 	float3 litColor = dirLight;
 

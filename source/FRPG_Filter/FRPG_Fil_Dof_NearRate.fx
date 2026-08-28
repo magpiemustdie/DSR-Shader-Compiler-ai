@@ -8,15 +8,16 @@
 //   r0.x = t1.sample(uv)
 //   r0.y = -cb0[8].y + cb0[8].x
 //   r0.x = r0.x * r0.y + cb0[8].y
-//   r0.x = cb0[8].x / r0.x               → viewZ
-//   r0.yz = cb0[10].xy / cb0[8].y        → nearStart, nearEnd (normalized)
-//   r0.x = -r0.y + r0.x                  → viewZ - nearStart
-//   r0.y = -r0.y + r0.z                  → nearEnd - nearStart
-//   r0.x = div_sat(r0.x, r0.y)           → nearRate
-//   o0.w = r0.x * cb0[10].z              → alpha = nearRate * scale
+//   r0.x = cb0[8].x / r0.x               в†’ viewZ
+//   r0.yz = cb0[10].xy / cb0[8].y        в†’ nearStart, nearEnd (normalized)
+//   r0.x = -r0.y + r0.x                  в†’ viewZ - nearStart
+//   r0.y = -r0.y + r0.z                  в†’ nearEnd - nearStart
+//   r0.x = div_sat(r0.x, r0.y)           в†’ nearRate
+//   o0.w = r0.x * cb0[10].z              в†’ alpha = nearRate * scale
 //   o0.xyz = 0
 
 #include "FRPG_Fil_Common.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
 
 struct FIL_OUT
 {

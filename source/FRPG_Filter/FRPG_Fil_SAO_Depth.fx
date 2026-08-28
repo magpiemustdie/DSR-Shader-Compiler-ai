@@ -5,6 +5,7 @@
 // cb0[8] = CameraParam (x:near*far, y:far, z:near-far, w:near*far)
 
 #include "FRPG_Fil_Common.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
 
 struct FIL_OUT { float4 Color : SV_Target0; };
 

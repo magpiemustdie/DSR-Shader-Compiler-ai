@@ -19,7 +19,7 @@
 #ifndef FRPG_SNOW_FORWARD_FX
 #define FRPG_SNOW_FORWARD_FX
 
-#include "FRPG_Snow_Common.fxh"
+#include "FRPG_Snow_Common_new.fxh"
 
 struct SNOW_OUT_FWD {
     float4 Color : SV_Target0;
@@ -185,9 +185,10 @@ SNOW_OUT_FWD FragmentMain_Forward(SNOW_IN In)
     // Alpha test, add gFC_FgSkinAddColor, multiply gFC_ModelMulCol
     // -----------------------------------------------------------------------
     float4 diff = gSMP_DiffuseMap.Sample(gSMP_DiffuseMapSampler, In.TexSnow.zw);
-    if (AlphaTest == 1 && AlphaTestRef.x >= diff.w) discard;
     diff.xyz += gFC_FgSkinAddColor.xyz;
     diff     *= gFC_ModelMulCol;
+
+    if (AlphaTest == 1 && AlphaTestRef.x >= diff.w) discard;
 
     // -----------------------------------------------------------------------
     // Snow blend: saturate((hInv * v5.w - gFC_SnowDetailParam.z) * gFC_SnowDetailParam.y)
@@ -204,7 +205,9 @@ SNOW_OUT_FWD FragmentMain_Forward(SNOW_IN In)
     // r7.xyz += (-1,-1,-1); r7.xyz = gFC_NormalScale * r7 + (0,0,1)
     // detWorld = normalize(tanYZX.zxy*r7.y + wNrm*r7.x + wNrm*r7.z)
     // -----------------------------------------------------------------------
-    float2 detS   = gSMP_Subsurf.Sample(gSMP_SubsurfMapSampler, In.TexSnow.zw).xy;
+    // FIX(08/25): ref samples t10 (EnvDif/DetailNormal LUT) here, NOT t15.
+    // gSMP_Subsurf aliased to t15 caused green snow (LUT read as normal).
+    float2 detS   = gSMP_10.Sample(gSMP_10Sampler, In.TexSnow.zw).xy;
     float2 r7xy   = detS + detS;
     float2 detN   = detS * 2.0f - 1.0f;
     float  detZ   = sqrt(1.0f - min(dot(detN, detN), 1.0f));
@@ -417,11 +420,11 @@ SNOW_OUT_FWD FragmentMain_Forward(SNOW_IN In)
     envSpec *= fresnelW;
 
     // DFG LUT: t9, UV=(bRough, NdotV_sat)
-    // ASM swizzle t9.zxyw → r7.yz = (t9.z, t9.x)
+    // ref: sample_l t9 -> r9.xy; mul r1.z, roughSat, r9.y; mad brdf, bSpec, r9.x, r1.z
     float4 dfgFull = gSMP_DFG.SampleLevel(gSMP_DFGMapSampler, float2(bRough, NdotV_sat), 0.0f);
-    float  dfg_scale = dfgFull.z;  // r7.y
-    float  dfg_bias  = dfgFull.x;  // r7.z
-    envSpec *= bSpec * dfg_scale + roughSat * dfg_bias;
+    float  dfg_i   = roughSat * dfgFull.y;   // mul (scalar first)
+    float3 envBRDF = bSpec * dfgFull.x + dfg_i;
+    envSpec *= envBRDF;
 
     // Diffuse env: t11 (gSMP_EnvDifMap)
     float3 envDif = gSMP_EnvDifMap.SampleLevel(gSMP_EnvDifMapSampler, blendN, 0.0f).xyz;
@@ -544,8 +547,28 @@ SNOW_OUT_FWD FragmentMain_Forward(SNOW_IN In)
     float fogFactor = saturate(saturate(In.WorldNrm.w) * gFC_FogCol.w);
     litSRGB = fogFactor * (gFC_FogCol.xyz - litSRGB) + litSRGB;
 
-    float4 scattered = CalcGetLightScatteringCol(float4(litSRGB, 1.0f), float4(V, eyeDist));
-    float3 finalColor = exp2(log2(abs(scattered.rgb)) * 2.2f);
+    // scattering: ref lines 581-601
+    float scatDot = dot(-V, gFC_LsLightDir.xyz);
+    float hn2 = scatDot * scatDot + 1;
+    float3 ext = -gFC_LsBeta1PlusBeta2.xyz * eyeDist;
+    ext = gFC_LsLightDir.www * ext;
+    ext = float3(2.08136892f, 2.08136892f, 2.08136892f) * ext;
+    ext = exp2(ext);
+    float3 terrR = gFC_LsTerrainReflectance.xyz * ext;
+    float hggD = gFC_LsHGg.z * -scatDot + gFC_LsHGg.y;
+    float rsqH = rsqrt(hggD);
+    float invH = 1 / hggD;
+    float hggt = rsqH * invH;
+    hggt = gFC_LsHGg.x * hggt;
+    float3 betaD2s = gFC_LsBetaDash2.xyz * hggt;
+    float3 betas = gFC_LsBetaDash1.xyz * hn2 + betaD2s;
+    float3 oneM = float3(1, 1, 1) + -ext;
+    betas = oneM * betas;
+    betas = gFC_LsOneOverBeta1PlusBeta2.xyz * betas;
+    betas = gFC_LsTerrainReflectance.www * betas;
+    betas = gFC_LsSunColor.xyz * betas;
+    float3 scatteredRGB = litSRGB * terrR + betas;
+    float3 finalColor = exp2(log2(abs(scatteredRGB)) * 2.2f);
 
     // -----------------------------------------------------------------------
     // Debug output (gFC_DebugDraw.x)

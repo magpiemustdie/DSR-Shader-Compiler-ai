@@ -13,6 +13,7 @@
 #if BLUR_TYPE == 0
 #define SFXPBL_NO_GLOBALS
 #endif
+#define SFXPBL_NO_REG67
 #include "FRPG_SfxPBL_Common.fxh"
 
 #if BLUR_TYPE != 0
@@ -23,8 +24,10 @@ float4 g_avSampleOffsets[16] : register(c13);
 #endif
 
 #if BLUR_TYPE == 3
-Texture2D    gSMP_1 : register(t1);   // NormalSampler
-SamplerState gSMP_1Sampler : register(s1);
+Texture2D    NormalSampler        : register(t1);
+SamplerState NormalSamplerSampler : register(s1);
+#define gSMP_1        NormalSampler
+#define gSMP_1Sampler NormalSamplerSampler
 #endif
 
 struct BLUR_PS_IN

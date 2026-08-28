@@ -15,10 +15,14 @@
 //   div r0.x, cb0[8].x, r0.x
 
 #include "FRPG_Fil_Common.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
 
-Texture2DMS<float> gSMP_Depth1MS : register(t1);
-
-uint4 gFC_CBParam_uint : register(c81); // y:checkerboard frame offset (uint)
+Texture2DMS<float> gSMP_Depth : register(t1);
 
 struct FIL_IN_POS { float4 Pos : SV_Position; float2 UV : TEXCOORD0; };
 struct FIL_OUT { float4 Color : SV_Target0; };
@@ -28,9 +32,9 @@ FIL_OUT FragmentMain(FIL_IN_POS In)
     FIL_OUT Out;
 
     uint2 pixCoord = (uint2)In.Pos.xy;
-    uint  sampleIdx = (pixCoord.x + pixCoord.y + gFC_CBParam_uint.y) & 1u;
+    uint  sampleIdx = (pixCoord.x + pixCoord.y + gFC_FrameIndex.y) & 1u;
     uint  halfX = pixCoord.x >> 1u;
-    float depth = gSMP_Depth1MS.Load(uint2(halfX, pixCoord.y), sampleIdx).r;
+    float depth = gSMP_Depth.Load(uint2(halfX, pixCoord.y), sampleIdx).r;
 
     // Linearize depth — exact DXBC:
     //   add r0.y, -cb0[8].y, cb0[8].x

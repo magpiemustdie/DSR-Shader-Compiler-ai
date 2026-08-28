@@ -8,21 +8,22 @@
 //
 // Original instructions:
 //   r0.x = t1.sample(uv)
-//   r0.y = -cb0[8].y + cb0[8].x          → range = CameraParam.x - CameraParam.y
-//   r0.x = r0.x * r0.y + cb0[8].y        → mapped = depth * range + CameraParam.y
-//   r0.x = cb0[8].x / r0.x               → viewZ = CameraParam.x / mapped
-//   r0.yz = cb0[9].xy / cb0[8].y         → farStart = DofFarParam.x/CameraParam.y, farEnd = DofFarParam.y/CameraParam.y
-//   r0.x = -r0.y + r0.x                  → viewZ - farStart
-//   r0.y = -r0.y + r0.z                  → farEnd - farStart
-//   r0.x = div_sat(r0.x, r0.y)           → dofRate = saturate((viewZ-farStart)/(farEnd-farStart))
-//   r0.x = mul_sat(r0.x, cb0[9].z)       → dofRate *= DofFarParam.z (scale)
-//   r0.yz = (uv - 0.5) * ScreenSize.xy   → screen-space offset from center
-//   r0.y = length(r0.yz)                 → distance from center
-//   r0.y = r0.y - cb0[7].x               → dist - vignetteStart
-//   r0.y = mul_sat(r0.y, cb0[7].y)       → vignette = saturate((dist-start)*invRange)
-//   o0 = r0.y * cb0[7].z + r0.x          → vignette*strength + dofRate (all 4 channels)
+//   r0.y = -cb0[8].y + cb0[8].x          в†’ range = CameraParam.x - CameraParam.y
+//   r0.x = r0.x * r0.y + cb0[8].y        в†’ mapped = depth * range + CameraParam.y
+//   r0.x = cb0[8].x / r0.x               в†’ viewZ = CameraParam.x / mapped
+//   r0.yz = cb0[9].xy / cb0[8].y         в†’ farStart = DofFarParam.x/CameraParam.y, farEnd = DofFarParam.y/CameraParam.y
+//   r0.x = -r0.y + r0.x                  в†’ viewZ - farStart
+//   r0.y = -r0.y + r0.z                  в†’ farEnd - farStart
+//   r0.x = div_sat(r0.x, r0.y)           в†’ dofRate = saturate((viewZ-farStart)/(farEnd-farStart))
+//   r0.x = mul_sat(r0.x, cb0[9].z)       в†’ dofRate *= DofFarParam.z (scale)
+//   r0.yz = (uv - 0.5) * ScreenSize.xy   в†’ screen-space offset from center
+//   r0.y = length(r0.yz)                 в†’ distance from center
+//   r0.y = r0.y - cb0[7].x               в†’ dist - vignetteStart
+//   r0.y = mul_sat(r0.y, cb0[7].y)       в†’ vignette = saturate((dist-start)*invRange)
+//   o0 = r0.y * cb0[7].z + r0.x          в†’ vignette*strength + dofRate (all 4 channels)
 
 #include "FRPG_Fil_Common.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
 
 struct FIL_OUT
 {

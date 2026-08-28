@@ -1,4 +1,4 @@
-// FRPG_FS_Sfx_Tracer.fx — SFX Tracer pixel shader (TracerType0-3)
+// FRPG_FS_Sfx_Tracer.fx вЂ” SFX Tracer pixel shader (TracerType0-3)
 // Reconstructed from DSR DXBC (FRPG_SfxPBL_DX11)
 // Compile: /E FragmentMain /T ps_5_0 /DTRACER_TYPE=n
 //   Type0: diffuse + fog + tone (no lum branch)
@@ -16,12 +16,16 @@
 float4 DL_FREG_010 : register(c10);
 
 #if TRACER_TYPE == 1 || TRACER_TYPE == 3
-Texture2D    gSMP_2 : register(t2);   // FrameSampler
-SamplerState gSMP_2Sampler : register(s2);
+Texture2D    FrameSampler        : register(t2);
+SamplerState FrameSamplerSampler : register(s2);
+#define gSMP_2        FrameSampler
+#define gSMP_2Sampler FrameSamplerSampler
 #endif
 #if TRACER_TYPE == 3
-Texture2D    gSMP_1 : register(t1);   // NormalSampler
-SamplerState gSMP_1Sampler : register(s1);
+Texture2D    NormalSampler        : register(t1);
+SamplerState NormalSamplerSampler : register(s1);
+#define gSMP_1        NormalSampler
+#define gSMP_1Sampler NormalSamplerSampler
 #endif
 
 #if TRACER_TYPE == 0 || TRACER_TYPE == 2
@@ -52,7 +56,7 @@ float4 FragmentMain(TRACER_PS_IN In) : SV_Target0
 {
     float4 dif = gSMP_0.Sample(gSMP_0Sampler, In.TC3) * In.Color0;
     float alpha = dif.w * (1.0f - In.Color1.x * g_fog_color.w);
-    if (AlphaTest == 1 && AlphaTestRef.x >= alpha) discard;
+    if (AlphaTestRef.x >= alpha) { if (AlphaTest == 1) discard; }
     float3 col = lerp(dif.xyz * 0.5f, g_fog_color.xyz, g_fog_color.w * In.Color1.y);
     float4 Out = g_toneCorrectParams.xxxx * float4(col, alpha);
     Out.w = saturate(Out.w);
@@ -63,7 +67,7 @@ float4 FragmentMain(TRACER_PS_IN In) : SV_Target0
 {
     float alpha = gSMP_0.Sample(gSMP_0Sampler, In.TC3).w * In.Color0.w
                 * (1.0f - In.Color1.x * g_fog_color.w);
-    if (AlphaTest == 1 && AlphaTestRef.x >= alpha) discard;
+    if (AlphaTestRef.x >= alpha) { if (AlphaTest == 1) discard; }
     float4 Out = g_toneCorrectParams.xxxx * float4(1, 0, 1, alpha);
     Out.w = saturate(Out.w);
     return Out;
@@ -74,7 +78,7 @@ float4 FragmentMain(TRACER_PS_IN In) : SV_Target0
     float alpha = 1.0f - In.Params.x * g_fog_color.w;
     float4 Out;
     Out.w = alpha;
-    if (AlphaTest == 1 && AlphaTestRef.x >= alpha) discard;
+    if (AlphaTestRef.x >= alpha) { if (AlphaTest == 1) discard; }
 #if TRACER_TYPE == 3
     float2 nrm = gSMP_1.Sample(gSMP_1Sampler, In.DiffUV).xy * 2.0f - 1.0f;
     nrm *= DL_FREG_010.x;

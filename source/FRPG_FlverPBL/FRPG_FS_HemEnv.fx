@@ -300,10 +300,30 @@ GBUFFER_GB_OUT FragmentMain(VTX_OUT In)
 GBUFFER_OUT FragmentMain(VTX_OUT In)
 {
     GBUFFER_OUT Out;
-    float3 s;
-    switch (gFC_DebugDraw.x)
+    // base color scaled by ToneMap.x (outside conditional)
+    float3 baseCol = float3(1.0f, 0.0f, 1.0f) * gFC_ToneMap.x;
+
+    // ReverseToneMap — present in Gst/Sfx refs but NOT Phn
+#if defined(WITH_GhostMap) || defined(WITH_Glow)
+    float3 r0 = float3(1.0f, 0.0f, 1.0f) * gFC_ToneMap.x;
+    if (gFC_InverseToneMapEnable.x != 0.0f)
     {
-        case 1:  s = float3(1, 0, 1); break;
+        float lum = gSMP_6.Sample(gSMP_6Sampler, float2(0.5f, 0.5f)).x;
+        lum = max(lum, gFC_AdaptParam.z);
+        lum = min(lum, gFC_AdaptParam.w);
+        float3 scaled = gFC_AdaptParam.yyy * lum.xxx;
+        float eps = lum + 0.0001f;
+        float3 combined = eps * scaled;
+        r0 = combined / gFC_AdaptParam.x;
+    }
+#else
+    float3 r0 = float3(1.0f, 0.0f, 1.0f);
+#endif
+
+    float3 s;
+    switch ((int)gFC_DebugDraw.x)
+    {
+        case 1:  s = r0; break;
         case 2:  s = float3(0, 0, 0); break;
         case 3:  s = float3(0, 0, 0); break;
         case 4:  s = float3(0, 0, 0); break;
@@ -311,7 +331,7 @@ GBUFFER_OUT FragmentMain(VTX_OUT In)
         case 6:  s = float3(1, 0, 0); break;
         default: s = float3(0, 0, 0); break;
     }
-    Out.GBuffer0 = float4(1, 0, 1, 1);
+    Out.GBuffer0 = float4(r0, 1);
     Out.GBuffer1 = float4(s, 0);
     return Out;
 }

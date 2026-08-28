@@ -3,7 +3,9 @@
 	@file		FRPG_FS_Non.fx
 	@brief		Non-environment fragment shader (forward, diffuse-only)
 	@par		No env IBL, no point lights, no specular PBR.
-				Diffuse + bump + lightmap + shadowmap + fog + scattering only.
+				Diffuse + detail-bump + shadowmap/lightmap + fog + scattering only.
+				WITH_BumpMap is a DETAIL/HEIGHT bump (pow + min modulation), NOT a
+				tangent-space normal map — matches reference Non ASM.
 
 	Copyright &copy; @YEAR@ FromSoftware, Inc.
 
@@ -17,169 +19,116 @@
 
 #include "FRPG_Common.fxh"
 
-GBUFFER_OUT FragmentMain(VTX_OUT In)
-{
-	GBUFFER_OUT Out = (GBUFFER_OUT)0;
+// Single-target output: ref _Non OSGN has only SV_Target0
+struct NON_OUT {
+	float4 Color : SV_Target0;
+};
 
+NON_OUT FragmentMain(VTX_OUT In)
+{
+	NON_OUT Out = (NON_OUT)0;
+
+	// ref v7: .xy = diffuse UV, .zw = secondary UV (lightmap / layer2 / bump)
 #if defined(WITH_MultiTexture)
 	float4 difTexUV = In.TexDifDif;
 #elif defined(WITH_LightMap)
-	float2 difTexUV = In.TexDifLit.xy;
+	float4 difTexUV = In.TexDifLit;
 #else
 	float2 difTexUV = In.TexDif.xy;
 #endif
 
-	{//xyz - view vector, w - camera distance
+	{
 		In.VecEye = CalcGetVecEye_FS(In.VecEye);
 	}
 
-#if defined(WITH_BumpMap) && defined(WITH_Parallax)
-	if (gFC_ParallaxParams.x > 0.0f) {
-		difTexUV.xy = ParallaxOcclusionMapping(difTexUV.xy, gFC_ParallaxParams.x, In.VecEye.xyz, In.VecTan.xyz, In.VecBin, In.VecNrm.xyz);
-	}
-#endif
-
+	// Diffuse color
 #ifdef WITH_MultiTexture
-	float4 sampledColor = TexDiff(difTexUV.xy);
-	float4 sampledColor2 = TexDiff2(In.TexDifDif.zw);
-	sampledColor2.rgb += gFC_FgSkinAddColor.rgb;
-	sampledColor = float4(lerp(sampledColor.rgb, sampledColor2.rgb, In.ColVtx.a), 1.0)*float4(In.ColVtx.rgb, 1.0) * gFC_DifMapMulCol;
-	sampledColor = qlocDoAlphaTest(sampledColor);
+	float4 c1 = TexDiff(difTexUV.xy);
+	float4 c2 = TexDiff2(In.TexDifDif.zw);
+	c2.rgb += gFC_FgSkinAddColor.rgb;
+	float3 mulRGB = lerp(c1.rgb, c2.rgb, In.ColVtx.a) * In.ColVtx.rgb * gFC_DifMapMulCol.rgb;
+	float4 sampledColor = float4(mulRGB, gFC_DifMapMulCol.a);
 #else
-	float4 sampledColor = TexDiff(difTexUV);
+	float4 sampledColor = TexDiff(difTexUV.xy);
 	sampledColor.rgb += gFC_FgSkinAddColor.rgb;
 	sampledColor *= In.ColVtx * gFC_DifMapMulCol;
+#endif
 	sampledColor = qlocDoAlphaTest(sampledColor);
+
+	// Lightmap (WITH_LightMap): ref does NOT multiply the raw lightmap into the
+	// diffuse. It runs the sample through pow(|lm|, gFC_DebugPointLightParams.z)
+	// and min()s it into the bump/shadow modulation inside the sRGB round-trip
+	// (see bumpMod below). The sample is kept here for that use.
+#if defined(WITH_LightMap)
+	#if defined(WITH_MultiTexture)
+		float3 lmTex = tex2D(gSMP_6, In.TexLit).xyz;
+	#else
+		float3 lmTex = tex2D(gSMP_6, In.TexDifLit.zw).xyz;
+	#endif
+#else
+	float3 lmTex = float3(0.0f, 0.0f, 0.0f);
 #endif
 
-	Out.GBuffer0.a = saturate(sampledColor.a);
+	Out.Color.a = sampledColor.a;
 
-	//qloc: face is backwards, invert normal
-	if (!In.isFrontFace) {
-		In.VecNrm.xyz = -In.VecNrm.xyz;
-	}
+	float3 N = normalize(In.VecNrm.xyz);
 
-{//Normal
-    #if WITH_ShadowMap == 2
-        #ifdef WITH_BumpMap
-            float3 vNrm = normalize(In.VecNrm.xyz);
-            float3 vTan = normalize(In.VecTan.xyz);
-            #ifdef WITH_MultiTexture
-                float3 bump1 = DecodeNormalMap(TEX2DSAMPLER(gSMP_BumpMap), difTexUV.xy);
-                float3 bump2 = DecodeNormalMap(TEX2DSAMPLER(gSMP_BumpMap2), difTexUV.zw);
-                bump1 = lerp(float3(0,0,1), bump1, gFC_NormalScale);
-                bump2 = lerp(float3(0,0,1), bump2, gFC_NormalScale);
-                float3 vBin = normalize(In.VecBin.xyz);
-                float3 nrmA = normalize(vBin*bump1.x + vTan*bump1.y + vNrm*bump1.z);
-                float3 nrmB = normalize(vBin*bump2.x + vTan*bump2.y + vNrm*bump2.z);
-                In.VecNrm.xyz = normalize(lerp(nrmA, nrmB, In.ColVtx.a));
-            #else
-                In.VecNrm.xyz = CalcGetNormal_FromNormalTex_Bin(TEX2DSAMPLER(gSMP_BumpMap), difTexUV, In.VecNrm.xyz, In.VecTan, In.VecBin.xyz);
-            #endif
-        #else
-            In.VecNrm.xyz = normalize(In.VecNrm.xyz);
-        #endif
+	// --- Shadow / lightmap factor (computed before lighting, like ref) ---
+	float3 bumpMod = float3(1.0f, 1.0f, 1.0f);
+#if defined(WITH_ShadowMap)
+	float shadowFactor = 1.0f;
+	#if WITH_ShadowMap == CalcLispPos_VS
+		shadowFactor = CalcGetShadowRate(In.VtxLit, N, In.VecEye).r;
 	#else
-		#ifdef WITH_BumpMap
-			#ifdef WITH_MultiTexture
-				#ifdef CALC_VS_BINORMAL
-					In.VecNrm.xyz = CalcGetNormal_FromNormalTex_Mul_Bin(TEX2DSAMPLER(gSMP_BumpMap), TEX2DSAMPLER(gSMP_BumpMap2), difTexUV,  In.VecNrm.xyz, In.VecTan, In.VecTan2, In.VecBin, In.VecBin2, In.ColVtx.a);
-				#else
-					const float3 localVecBin = cross(In.VecNrm.xyz, In.VecTan.xyz)*In.VecTan.w;
-					const float3 localVecBin2 = cross(In.VecNrm.xyz, In.VecTan2.xyz)*In.VecTan2.w;
-					In.VecNrm.xyz = CalcGetNormal_FromNormalTex_Mul_Bin(TEX2DSAMPLER(gSMP_BumpMap), TEX2DSAMPLER(gSMP_BumpMap2), difTexUV,  In.VecNrm.xyz, In.VecTan, In.VecTan2, localVecBin, localVecBin2, In.ColVtx.a);
-				#endif
-			#else
-				#ifdef CALC_VS_BINORMAL
-					In.VecNrm.xyz = CalcGetNormal_FromNormalTex_Bin(TEX2DSAMPLER(gSMP_BumpMap), difTexUV, In.VecNrm.xyz, In.VecTan, In.VecBin);
-				#else
-					const float3 localVecBin = cross(In.VecNrm.xyz, In.VecTan.xyz)*In.VecTan.w;
-					In.VecNrm.xyz = CalcGetNormal_FromNormalTex_Bin(TEX2DSAMPLER(gSMP_BumpMap), difTexUV, In.VecNrm.xyz, In.VecTan, localVecBin);
-				#endif
-			#endif
-		#else
-			In.VecNrm.xyz = normalize(In.VecNrm.xyz);
-		#endif
+		shadowFactor = CalcGetShadowRateWorldSpaceNon(In.VtxWld, N, In.VecEye).r;
 	#endif
-	}
+	bumpMod = pow(abs(float3(1.0f, 1.0f, 1.0f) - gFC_ShadowColor.xyz * shadowFactor), gFC_DebugPointLightParams.z);
+#endif
 
-	float3 baseColor = sampledColor.rgb;
-	float4 lightmapColor = 1.0f;
-	{//lightmap and shadowmap
-	#ifdef WITH_LightMap
-		#ifdef WITH_MultiTexture
-			const float2 lightmapUV = In.TexLit.xy;
-		#else
-			const float2 lightmapUV = In.TexDifLit.zw;
-		#endif
-		#ifdef WITH_ShadowMap
-			const float4 lightMapVal = TexLightmap(lightmapUV);
-			#if WITH_ShadowMap == CalcLispPos_VS
-				const float3 shadowMapVal = CalcGetShadowRateLitSpace(In.VtxLit, In.VecNrm.xyz, In.VecEye).rgb;
-			#else
-				const float3 shadowMapVal = CalcGetShadowRateWorldSpace(In.VtxWld, In.VecNrm.xyz, In.VecEye).rgb;
-			#endif
-			lightmapColor.rgb = min(shadowMapVal.rgb, lightMapVal.rgb)*gFC_DebugPointLightParams.y;
-		#else
-			lightmapColor = TexLightmap(lightmapUV) * float4(gFC_DebugPointLightParams.y, gFC_DebugPointLightParams.y, gFC_DebugPointLightParams.y, 1);
-		#endif
-	#else
-		#ifdef WITH_ShadowMap
-			#if WITH_ShadowMap == CalcLispPos_VS
-				const float3 shadowMapVal = CalcGetShadowRateLitSpace(In.VtxLit, In.VecNrm.xyz, In.VecEye).rgb;
-			#else
-				const float3 shadowMapVal = CalcGetShadowRateWorldSpace(In.VtxWld, In.VecNrm.xyz, In.VecEye).rgb;
-			#endif
-			lightmapColor.rgb = shadowMapVal.rgb;
-		#endif
-	#endif
-	}
+	// --- Lightmap modulation: pow(|lm|, z), min'd with the shadow term ---
+	// (ref Lit asm: log/×cb101.z/exp on the t6 sample, then mul into linearized
+	// diffuse; WITH_BumpMap adds nothing by itself in the Non family — ref Bmp
+	// variants declare no bump texture.)
+#if defined(WITH_LightMap)
+	bumpMod = min(pow(abs(lmTex), gFC_DebugPointLightParams.z), bumpMod);
+#endif
 
-	// Diffuse-only forward lighting: base color * lightmap/shadow
-	float3 litColor = baseColor;
-
-#if defined(WITH_LightMap) || defined(WITH_SpecularMap) || defined(WITH_ShadowMap)
-	// sRGB round-trip: scattering → sRGB encode → lighting factor → sRGB decode → fog → scattering blend → gamma
-	litColor = CalcGetLightScatteringCol(float4(litColor, 1), In.VecEye).rgb;
-	litColor = pow(abs(litColor), 2.2f);
-	{//lighting factor in sRGB space (prevents pow fusion)
-		#if defined(WITH_LightMap)
-			litColor *= lightmapColor.rgb;
-		#elif defined(WITH_ShadowMap)
-			litColor *= lightmapColor.rgb;
-		#endif
-	}
-	#ifdef WITH_SpecularMap
-	{
+	// --- PBL specular (WITH_SpecularMap) ---
+	float3 pbl = 0.0f;
+#ifdef WITH_SpecularMap
+	#if defined(WITH_MultiTexture)
 		float4 pblTex = tex2D(gSMP_PBLMap, difTexUV.xy);
-		litColor.rgb = mad(pblTex.rgb * gFC_SpcMapMulCol.rgb, In.ColVtx.xyz, litColor.rgb);
-	}
+		float4 pblTex2 = tex2D(gSMP_PBLMap2, In.TexDifDif.zw);
+		pblTex = lerp(pblTex, pblTex2, In.ColVtx.a);
+	#else
+		float4 pblTex = tex2D(gSMP_PBLMap, difTexUV.xy);
 	#endif
+	pbl = pblTex.rgb * gFC_SpcMapMulCol.rgb * In.ColVtx.rgb * bumpMod;
+#endif
+
+	// --- Final lit color ---
+	// ref applies the sRGB round-trip (pow(2.2)*bumpMod + pbl, then pow(5/11))
+	// ONLY when bumpMod is active (WITH_BumpMap / WITH_ShadowMap); otherwise it
+	// skips straight to scatter + final gamma to avoid an identity transform.
+#if defined(WITH_LightMap) || defined(WITH_ShadowMap) || defined(WITH_SpecularMap)
+	float3 litColor = pow(abs(sampledColor.rgb), 2.2f) * bumpMod + pbl;
 	litColor = pow(abs(litColor), 5.0f / 11.0f);
-	{ float fog = saturate(saturate(In.VecNrm.w) * gFC_FogCol.w); litColor.rgb = lerp(litColor.rgb, gFC_FogCol.xyz, fog); }
+#else
+	float3 litColor = sampledColor.rgb + pbl;
+#endif
+	{
+		float fog = saturate(saturate(In.VecNrm.w) * gFC_FogCol.w);
+		litColor = lerp(litColor, gFC_FogCol.xyz, fog);
+	}
 #ifdef VSLS
-	float4 scatteredColor = CalcGetLightScatteringCol_Blend(float4(litColor, 1), In.LsMul, In.LsAdd);
+	litColor = CalcGetLightScatteringCol_Blend(float4(litColor, 1.0f), In.LsMul, In.LsAdd).rgb;
 #else
-	float4 scatteredColor = CalcGetLightScatteringCol(float4(litColor, 1), In.VecEye);
+	litColor = CalcGetLightScatteringCol(float4(litColor, 1.0f), In.VecEye).rgb;
 #endif
-	litColor = scatteredColor.rgb;
-#else
-	// Simple path: fog → scattering → gamma (no texture lighting factor)
-	{ float fog = saturate(saturate(In.VecNrm.w) * gFC_FogCol.w); litColor.rgb = lerp(litColor.rgb, gFC_FogCol.xyz, fog); }
-#ifdef VSLS
-	float4 scatteredColor = CalcGetLightScatteringCol_Blend(float4(litColor, 1), In.LsMul, In.LsAdd);
-#else
-	float4 scatteredColor = CalcGetLightScatteringCol(float4(litColor, 1), In.VecEye);
-#endif
-	litColor = scatteredColor.rgb;
-#endif
-
 #ifdef WITH_Glow
-	litColor.rgb = ReverseToneMap(litColor.rgb);
+	litColor = ReverseToneMap(litColor);
 #endif
-
 	litColor = pow(abs(litColor), 2.2f);
-	Out.GBuffer0.rgb = litColor;
+	Out.Color.rgb = litColor;
 	return Out;
 }
-

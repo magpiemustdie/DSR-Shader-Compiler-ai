@@ -24,9 +24,6 @@ struct VS_OUT
 #if DOF_KIND == 0 || DOF_KIND == 2 || DOF_KIND == 5
     float4 UV2 : TEXCOORD1;
 #endif
-#if DOF_KIND == 0
-    float4 UV3 : TEXCOORD2;
-#endif
 #if DOF_KIND == 2 || DOF_KIND == 5
     float2 UV3 : TEXCOORD2;
 #endif
@@ -53,10 +50,12 @@ VS_OUT VertexMain(uint vertexID : SV_VertexID)
     Out.Pos = float4(uv * 2.0f - 1.0f, 0.0f, 1.0f);
 
 #if DOF_KIND == 0
-    Out.UV1 = float4(raw, raw);
-    Out.UV2 = float4(raw, 0.0f, 0.0f);
+    // Implicit uint->float at store: emitted as direct utof output writes
+    // (byte-repro; explicit casts get CSE-folded into a trailing mov).
+    Out.UV1 = float4(xBit, yBit, xBit, yBit);
+    Out.UV2 = float4(xBit, yBit, 0.0f, 0.0f);
 #elif DOF_KIND == 1
-    Out.UV1 = float4(raw, 0.0f, 0.0f);
+    Out.UV1 = float4(xBit, yBit, 0.0f, 0.0f);
 #elif DOF_KIND == 2
     Out.UV1 = float4(raw + gFC_ScreenSize.zw * float2(0.5f, 0.5f),
                      raw - gFC_ScreenSize.zw * float2(0.5f, 0.5f));

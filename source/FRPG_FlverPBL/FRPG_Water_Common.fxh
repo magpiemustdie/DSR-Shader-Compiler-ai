@@ -96,6 +96,7 @@ struct WATER_OUT {
 
 struct MASK_IN {
     float4 Pos     : SV_Position;
+    float2 UV      : TEXCOORD0;   // declared-unread in reference ISGN
 };
 
 struct MASK_OUT {
@@ -104,8 +105,8 @@ struct MASK_OUT {
 
 struct HM_IN {
     float4 Pos  : SV_Position;
-    float4 TexA : TEXCOORD1;
-    float3 TexB : TEXCOORD2;
+    float4 TexA : TEXCOORD0;   // ref ISGN: TEXCOORD0 xyzw
+    float4 TexB : TEXCOORD1;   // ref ISGN: TEXCOORD1 xyzw
 };
 
 struct HM_OUT {

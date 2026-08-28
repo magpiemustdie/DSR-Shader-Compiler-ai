@@ -126,9 +126,10 @@ float4 FragmentMain(PS_INPUT In) : SV_Target0
     float3 D = ProcessDetailBump(In.UV.xy);
     N = normalize(B * D.x + Tx * D.y + N * D.z);
 
-    float nz = N.z * rsqrt(dot(N, N));
-    if (nz < 0) return float4(1, 0, 0, 1);
-    return float4(nz * 0.5, nz * 0.5, nz * 0.5, 0.5);
+    // ref error metric: (Nx+Ny, Ny, Nz); no early-out branch
+    float3 e = float3(N.x + N.y, N.y, N.z);
+    float nz = N.z * rsqrt(dot(e, e));
+    return float4(nz * 0.5f, nz * 0.5f, nz * 0.5f, 0.5f);
 }
 #else
 float4 FragmentMain(PS_INPUT In) : SV_Target0
@@ -144,21 +145,39 @@ float4 FragmentMain(PS_INPUT In) : SV_Target0
     float3 D = ProcessDetailBump(In.UV.xy);
     N = normalize(B * D.x + Tx * D.y + N * D.z);
 
-    float nz = N.z * rsqrt(dot(N, N));
-    if (nz < 0) return float4(1, 0, 0, 1);
-    return float4(nz * 0.5, nz * 0.5, nz * 0.5, 0.5);
+    // ref error metric: (Nx+Ny, Ny, Nz); no early-out branch
+    float3 e = float3(N.x + N.y, N.y, N.z);
+    float nz = N.z * rsqrt(dot(e, e));
+    return float4(nz * 0.5f, nz * 0.5f, nz * 0.5f, 0.5f);
 }
 #endif
 
 #else
 float4 FragmentMain(PS_INPUT In) : SV_Target0
 {
-    float3 D = ProcessDetailBump(In.UV.xy);
-    float3 N;
-    N.xy = D.xy;
-    N.z = D.z + D.x;
-    N = normalize(N);
-    return float4(N.z * 0.5, N.z * 0.5, N.z * 0.5, 0.5);
+    // ref: decompiled ASM-faithful (float4 r0/r1 with vector masks, see FRPG_Dbg_Dif________________NrmErr.hlsl)
+    float4 r0, r1;
+    r0.xy = gFC_DetailBumpParam.xx * In.UV.xy;
+    r0.xy = g_tDetailBumpTex.Sample(g_sDetailBump, r0.xy).xy;
+    r0.xy = r0.xy * float2(2,2) + float2(-1,-1);
+    r0.z = dot(r0.xy, r0.xy);
+    r1.xy = gFC_DetailBumpParam.ww * r0.xy;
+    r0.x = min(1, r0.z);
+    r0.x = 1 - r0.x;
+    r0.x = sqrt(r0.x);
+    r0.y = dot(r1.xy, r1.xy);
+    r0.y = (r0.y < 9.99999975e-006) ? 1 : 0;
+    r1.z = r0.x + r0.y;
+    r0.x = dot(r1.xyz, r1.xyz);
+    r0.x = rsqrt(r0.x);
+    r0.xyz = r1.xyz * r0.xxx;
+    r1.xyzw = float4(1,0,0,1) * r0.xxyy;
+    r0.xyw = r1.xyy + r1.zwz;
+    r0.xyz = r0.zzz * float3(0,0,1) + r0.xyw;
+    r0.x = dot(r0.xyz, r0.xyz);
+    r0.x = rsqrt(r0.x);
+    r0.x = r0.z * r0.x;
+    return float4(r0.xxx * 0.5, 0.5);
 }
 #endif
 
@@ -175,16 +194,15 @@ float4 FragmentMain(PS_INPUT In) : SV_Target0
     if (AlphaTest == 1 && AlphaTestRef.x >= 1.0) discard;
 
     float3 N = normalize(In.Nrm.xyz);
+    // ref: tangent is normalized ONCE and reused directly in N1/N2 (no re-cross)
     float3 T1 = normalize(In.Tan1.xyz);
     float3 B1 = normalize(cross(N, T1)) * In.Tan1.w;
-    T1 = normalize(cross(B1, N));
 
     float3 b0 = SampleBump(In.UV.xy, g_tBumpTex0, g_sBump0);
     float3 N1 = normalize(B1 * b0.x + T1 * b0.y + N * b0.z);
 
     float3 T2 = normalize(In.Tan2.xyz);
     float3 B2 = normalize(cross(N, T2)) * In.Tan2.w;
-    T2 = normalize(cross(B2, N));
 
     float3 b1 = SampleBump(In.UV.zw, g_tBumpTex1, g_sBump1);
     float3 N2 = normalize(B2 * b1.x + T2 * b1.y + N * b1.z);
@@ -207,9 +225,9 @@ float4 FragmentMain(PS_INPUT In) : SV_Target0
     if (AlphaTest == 1 && AlphaTestRef.x >= 1.0) discard;
 
     float3 N = normalize(In.Nrm.xyz);
+    // ref: bump is applied with the ORIGINAL normalized tangent (no re-cross)
     float3 T = normalize(In.Tan.xyz);
     float3 B = normalize(cross(N, T)) * In.Tan.w;
-    T = normalize(cross(B, N));
 
     float3 bump = SampleBump(In.UV.xy, g_tBumpTex0, g_sBump0);
     N = normalize(B * bump.x + T * bump.y + N * bump.z);

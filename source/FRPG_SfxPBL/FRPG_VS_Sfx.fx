@@ -41,73 +41,92 @@
 #define SFX_NEARFAR_DIVSIZE 0
 #endif
 
-// ---- cbuffer $Globals (b0) ----
+// ---- $Globals (b0) ----
+// Loose globals with explicit cN registers -> fxc emits implicit "$Globals"
+// with RDEF variable order == declaration order below (matches reference).
+// Blur VS (KIND 0) declare no constants at all.
 #if SFX_VS_KIND == 6
 ByteAddressBuffer g_particles : register(t5);
-
-cbuffer VS_Globals : register(b0)
-{
-    float4 g_vs_nearfarparam : packoffset(c0);
-    float4 g_vs_light_0_dir : packoffset(c1);
-    float4 g_fog_prm : packoffset(c2);
-    float4x4 g_mViewProj : packoffset(c8);
-    float4 VR_20 : packoffset(c20);
-    float4 VR_21 : packoffset(c21);
-    float4 VR_22 : packoffset(c22);
-    float4 VR_23 : packoffset(c23);
-    float4 VR_24 : packoffset(c24);
-    float4 VR_25 : packoffset(c25);
-    float4 VR_26 : packoffset(c26);
-    float4 VR_27 : packoffset(c27);
-    float4 VR_28 : packoffset(c28);
-    float4 VR_29 : packoffset(c29);
-    row_major float4x3 gVC_PreTransformMatrix : packoffset(c30);
-    float4x4 gVC_ParticleToWorldMat : packoffset(c34);
-    float4 gVC_PreScale : packoffset(c38);
-    float4 gVC_FormVertexPos[8] : packoffset(c40);
-    float4 gVC_FormVertexUV[8] : packoffset(c48);
-    float4 gVC_FormVertexNormal[8] : packoffset(c56);
-    float4 gVC_FormVertexTangent[8] : packoffset(c64);
-    float4 gVC_FormVertexBinormal[8] : packoffset(c72);
-    float4 gVC_FormVertexColor[8] : packoffset(c80);
-    float4 gVC_Translucent : packoffset(c88);
-    float4 gVC_LightColor[4] : packoffset(c89);
-    float4 gVC_LightDir : packoffset(c93);
-    float4 gVC_DistanceFadeInfo : packoffset(c94);
-}
+#endif
+#if SFX_VS_KIND != 0
+float4   g_vs_nearfarparam : register(c0);
+float4   g_vs_light_0_dir  : register(c1);
+float4x4 g_mWorldViewProj  : register(c4);
+float4x4 g_mViewProj       : register(c8);
+float4x4 g_mView           : register(c12);
+float4x4 g_mProj           : register(c16);
+#if SFX_VS_KIND == 4
+float4   g_screenSize      : register(c30);
+#endif
+float4   g_fog_prm         : register(c2);
+float4   VR_20 : register(c20);
+float4   VR_21 : register(c21);
+#if SFX_VS_KIND == 1 || SFX_VS_KIND == 2 || SFX_VS_KIND == 3
+// Line/Tracer/Distortion name slots c22..c29 after the lighting LUT block
+float4   gVC_LsBeta1PlusBeta2        : register(c22);
+float4   gVC_LsTerrainReflectance    : register(c23);
+float4   gVC_LsOneOverBeta1PlusBeta2 : register(c24);
+float4   gVC_LsHGg                   : register(c25);
+float4   gVC_LsBetaDash1             : register(c26);
+float4   gVC_LsBetaDash2             : register(c27);
+float4   gVC_LsSunColor              : register(c28);
+float4   gVC_LsLightDir              : register(c29);
+#define VR_22 gVC_LsBeta1PlusBeta2
+#define VR_23 gVC_LsTerrainReflectance
+#define VR_24 gVC_LsOneOverBeta1PlusBeta2
+#define VR_25 gVC_LsHGg
+#define VR_26 gVC_LsBetaDash1
+#define VR_27 gVC_LsBetaDash2
+#define VR_28 gVC_LsSunColor
+#define VR_29 gVC_LsLightDir
 #else
-cbuffer VS_Globals : register(b0)
-{
-    float4 g_vs_nearfarparam : packoffset(c0);
-    float4 g_vs_light_0_dir : packoffset(c1);
-    float4 g_fog_prm : packoffset(c2);
+float4   VR_22 : register(c22);
+float4   VR_23 : register(c23);
+float4   VR_24 : register(c24);
+float4   VR_25 : register(c25);
+float4   VR_26 : register(c26);
+float4   VR_27 : register(c27);
+float4   VR_28 : register(c28);
+float4   VR_29 : register(c29);
+#endif
 #if SFX_VS_KIND == 3
-    float4x4 g_mWorldViewProj : packoffset(c4);
+// Distortion tail (ref offsets: 480 xyz / 496 x)
+float3   g_eye_pos               : register(c30);
+float    g_UsingFrameBufTexture  : register(c31);
 #endif
-    float4x4 g_mViewProj : packoffset(c8);
-    float4 VR_20 : packoffset(c20);
-    float4 VR_21 : packoffset(c21);
-    float4 VR_22 : packoffset(c22);
-    float4 VR_23 : packoffset(c23);
-    float4 VR_24 : packoffset(c24);
-    float4 VR_25 : packoffset(c25);
-    float4 VR_26 : packoffset(c26);
-    float4 VR_27 : packoffset(c27);
-    float4 VR_28 : packoffset(c28);
-    float4 VR_29 : packoffset(c29);
-    float4 gVC_030 : packoffset(c30);   // Distortion: xyz = eye pos; PointSprite: w = screen inv-X
-    float4 gVC_031 : packoffset(c31);   // Distortion: x = UsingFrameBufTexture
-}
-#define g_eye_pos (gVC_030.xyz)
-#define g_UsingFrameBufTexture (gVC_031.x)
-#define g_screenSizeInvX (gVC_030.w)
+#if SFX_VS_KIND == 5 || SFX_VS_KIND == 6
+// FormVertex / particle block (ref offsets 480..1504)
+#if SFX_VS_KIND == 6
+// particle path transforms axes via dot(row,...): keep rows in registers
+row_major float4x3 gVC_PreTransformMatrix  : register(c30);
+#else
+float4x3 gVC_PreTransformMatrix            : register(c30);
 #endif
+float4x3 gVC_ParticleToWorldMat            : register(c34);
+float4   gVC_PreScale            : register(c38);
+float4   gVC_FormVertexPos[8]      : register(c40);
+float4   gVC_FormVertexUV[8]       : register(c48);
+float4   gVC_FormVertexNormal[8]   : register(c56);
+float4   gVC_FormVertexTangent[8]  : register(c64);
+float4   gVC_FormVertexBinormal[8] : register(c72);
+float4   gVC_FormVertexColor[8]    : register(c80);
+float4   gVC_Translucent         : register(c88);
+float4   gVC_LightColor[4]       : register(c89);
+float4   gVC_LightDir            : register(c93);
+float4   gVC_DistanceFadeInfo    : register(c94);
+#endif
+#if SFX_VS_KIND == 4
+#define g_screenSizeInvX (g_screenSize.w)
+#endif
+#endif // SFX_VS_KIND != 0
 
 // ---- helpers ----
+#if SFX_VS_KIND != 0
 float2 SfxFog2(float clipW)
 {
     return saturate(VR_21.xy * ((clipW - g_fog_prm.x) * g_fog_prm.y));
 }
+#endif
 
 #if SFX_VS_KIND == 4 || SFX_VS_KIND == 5 || SFX_VS_KIND == 6
 void SfxRimLight(float3 worldPos, out float3 rim, out float3 light)
@@ -225,7 +244,7 @@ SfxParticleData SfxParticleLoad(uint vid)
     float3 E_w = float3(dot(col2, gVC_PreTransformMatrix[0]), dot(col2, gVC_PreTransformMatrix[1]), dot(col2, gVC_PreTransformMatrix[2]));
 
     float3 vp = float3(gVC_FormVertexPos[vi].xy, 1.0f);
-    float3 pw = mul(float4(pos.xyz, 1.0f), gVC_ParticleToWorldMat).xyz;
+    float3 pw = mul(float4(pos.xyz, 1.0f), gVC_ParticleToWorldMat);
     p.worldPos = mul(vp, float3x3(A_w, B_w, pw));
 
     float3 n = gVC_FormVertexNormal[vi].xyz;
@@ -279,7 +298,7 @@ struct SfxBlurIn
 {
     float2 Pos : POSITION;
 #if SFX_VS_TYPE == 1
-    float4 UV0 : TEXCOORD0;
+    float2 UV0 : TEXCOORD0;
     float2 UV1 : TEXCOORD1;
 #else
     float2 UV0 : TEXCOORD0;
@@ -343,7 +362,7 @@ struct SfxTracerIn
     float3 T : TANGENT;
     float3 B : BINORMAL;
     float4 Color : COLOR0;
-    float4 UV : TEXCOORD0;
+    float2 UV : TEXCOORD0;
     float U1 : TEXCOORD1;
 };
 #if SFX_VS_TYPE == 0
@@ -686,7 +705,8 @@ struct SfxIn_5
     float3 Pos : POSITION;
     float4 Color : COLOR0;
     float4 UV0 : TEXCOORD0;
-    float4 UV1 : TEXCOORD1;
+    float2 UV1 : TEXCOORD1;
+    float2 T2dead : TEXCOORD2;   // declared-unread in reference ISGN
 };
 struct SfxOut_5
 {
@@ -729,7 +749,7 @@ struct SfxIn_6
     float3 Pos : POSITION;
     float4 Color : COLOR0;
     float4 UV0 : TEXCOORD0;
-    float4 UV1 : TEXCOORD1;
+    float2 UV1 : TEXCOORD1;
     float2 Size2 : TEXCOORD2;   // .y = size
 };
 struct SfxOut_6
@@ -769,6 +789,8 @@ struct SfxIn_7
     float3 Pos : POSITION;
     float4 Color : COLOR0;
     float4 UV0 : TEXCOORD0;
+    float2 T1dead : TEXCOORD1;   // declared-unread in reference ISGN
+    float2 T2dead : TEXCOORD2;
 };
 struct SfxOut_7
 {
@@ -811,6 +833,7 @@ struct SfxIn_8
     float3 Pos : POSITION;
     float4 Color : COLOR0;
     float4 UV0 : TEXCOORD0;
+    float2 T1dead : TEXCOORD1;   // declared-unread in reference ISGN
     float2 Size2 : TEXCOORD2;   // .y = size
 };
 struct SfxOut_8

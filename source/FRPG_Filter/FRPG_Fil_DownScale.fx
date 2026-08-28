@@ -4,6 +4,7 @@
 // Sample offsets in cb0[22..37] = gFC_avSampleOffsets0..15
 
 #include "FRPG_Fil_Common.fxh"
+#include "FRPG_Filter_FC_ext.fxh"
 
 struct FIL_OUT
 {

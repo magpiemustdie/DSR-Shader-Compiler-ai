@@ -28,12 +28,12 @@ FIL_OUT FragmentMain(FIL_IN_HDR In)
 
     float4 noise = gSMP_2.Sample(gSMP_2Sampler, In.UV.zw);
 
-    // Soft-light blend: multiply where noise<0.5, screen where noise>=0.5
+    // Soft-light blend: ref does mul where noise>=0.5, screen where noise<0.5 (swapped vs typical)
     float4 mul2   = hdr * noise * 2.0f;
     float4 inv2n  = (1.0f - noise) * 2.0f;
     float4 inv1h  = 1.0f - hdr;
     float4 screen = 1.0f - inv2n * inv1h;
-    float4 mask   = (float4)(noise < 0.5f);
+    float4 mask   = (float4)(noise >= 0.5f);
     float4 blended = mul2 * mask + screen * (1.0f - mask);
     float4 delta   = blended - hdr;
     Out.Color = gFC_NoiseParam2.x * delta + hdr;

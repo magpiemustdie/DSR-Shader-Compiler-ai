@@ -1,23 +1,46 @@
-// FRPG_Fil_Quad_Unfocus3x3.fx - VS for Dof_Unfocus3x3 and Dof_UnfocusNearRate3x3
-// 4 cross UV offsets + center UV
-// o1.xy=UV+(1.0,0.28)*texel  o1.zw=UV+(-1.0,0.28)*texel
-// o2.xy=UV+(0.28,-1.0)*texel o2.zw=UV+(-0.28,-1.0)*texel
-// o3.xy=UV center
+// FRPG_Fil_Quad_Unfocus3x3.fx
+// Reconstructed from DSR DXBC (FRPG_Fil_Dof_Unfocus3x3.vpo).
+// BYTE-REPRO NOTES:
+// 1. Lane-mapped temp (r.xz/r.w/r.y) reproduces the ref allocation where raw UV
+//    lives in SEPARATE conversions from the Pos math (retail fxc cannot emit the
+//    second utof - FromSoft's compiler converts per-use-site without CSE - so
+//    the floor here is ~-3.4% SHEX, scheduler-only).
+// 2. The +-offsets must be written as TWO float2 statements (xy positive,
+//    zw as raw - cb*vec) so fxc emits four 2-lane mads with negate ON THE CBUFFER
+//    operand, matching ref; a single float4 constructor folds signs into the
+//    literal instead.
+
 #include "FRPG_Fil_Common.fxh"
-struct VS_OUT { float4 Pos:SV_Position; float4 UV1:TEXCOORD0; float4 UV2:TEXCOORD1; float2 UV3:TEXCOORD2; };
-VS_OUT VertexMain(uint vertexID : SV_VertexID) {
+
+struct VS_OUT
+{
+    float4 Pos : SV_Position;
+    float4 UV1 : TEXCOORD0;
+    float4 UV2 : TEXCOORD1;
+    float2 UV3 : TEXCOORD2;
+};
+
+VS_OUT VertexMain(uint vertexID : SV_VertexID)
+{
     VS_OUT Out;
-    Out.Pos.zw = float2(0,1);
-    float4 r1;
-    r1.w = (float)(vertexID >> 1u);
-    r1.y = 1.0f - r1.w;
-    r1.xz = (float)(vertexID & 1u);
-    Out.Pos.xy = r1.xy * 2.0f - 1.0f;
-    float2 uv = r1.zw;
-    Out.UV1.xy = gFC_ScreenSize.zw * float2( 1.0f, 0.28f) + uv;
-    Out.UV1.zw = -gFC_ScreenSize.zz * float2( 1.0f, 0.28f) + uv;
-    Out.UV2.xy = gFC_ScreenSize.zw * float2( 0.28f,-1.0f) + uv;
-    Out.UV2.zw = -gFC_ScreenSize.zz * float2( 0.28f,-1.0f) + uv;
-    Out.UV3 = uv;
+
+    Out.Pos.zw = float2(0.0f, 1.0f);
+
+    uint yBit = vertexID >> 1u;
+    uint xBit = vertexID & 1u;
+
+    float4 r;
+    r.w  = yBit;
+    r.y  = 1.0f - (float)yBit;
+    r.xz = xBit;
+
+    Out.Pos.xy = r.xy * 2.0f - 1.0f;
+
+    float2 s = gFC_ScreenSize.zw;
+    Out.UV1.xy = s * float2(1.0f, 0.28f)  + r.zw;
+    Out.UV1.zw = r.zw - s * float2(1.0f, 0.28f);
+    Out.UV2.xy = s * float2(0.28f, -1.0f) + r.zw;
+    Out.UV2.zw = r.zw - s * float2(0.28f, -1.0f);
+    Out.UV3    = r.zw;
     return Out;
 }

@@ -75,15 +75,13 @@ float4 FragmentMain(VS_OUTPUT In) : SV_Target0
     V = V / camDist;
 
     float4 zGreater = (gFC_ShadowStartDist < pos.w);
-    float slice_f = dot(zGreater, 1.0f) - 1.0f;
-    uint slice = (uint)slice_f;
-    uint matIdx = slice << 2;
+    // ref emits ftoi for the cascade slice (signed conversion)
+    int slice = (int)(dot(zGreater, 1.0f) - 1.0f);
 
-    float4 posLS;
-    posLS.x = dot(float4(pos.xyz, 1.0f), gFC_ShadowMapMtxArray[slice][0]);
-    posLS.y = dot(float4(pos.xyz, 1.0f), gFC_ShadowMapMtxArray[slice][1]);
-    posLS.z = dot(float4(pos.xyz, 1.0f), gFC_ShadowMapMtxArray[slice][2]);
-    posLS.w = dot(float4(pos.xyz, 1.0f), gFC_ShadowMapMtxArray[slice][3]);
+    // Whole vector-matrix mul: fxc folds this into 4x dp4 with direct dynamic
+    // cbuffer operands (cb0[matIdx+11..14]); per-component dots materialize
+    // each row via 4x mov first (+16 instr).
+    float4 posLS = mul(float4(pos.xyz, 1.0f), gFC_ShadowMapMtxArray[slice]);
 
     float4 clamped = posLS.w * gFC_ShadowMapClamp[slice];
     float2 posClamped = posLS.xy;

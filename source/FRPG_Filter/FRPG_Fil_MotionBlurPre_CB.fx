@@ -65,8 +65,8 @@ FIL_OUT_MV FragmentMain(FIL_IN_CB In)
 
     // add r3.yz, r3.yz, v1.xy  → UV + offset
     float2 uv3 = r3yz + In.UV;
-    // sample t0.zxyw → r3.yz = (t0.z, t0.x) = (b, r)
-    float2 r3yz_s = gSMP_0.SampleLevel(gSMP_0Sampler, uv3, 0.0f).zx;
+    // sample t0.xy → r3.yz = (t0.x, t0.y) = (r, g) per ref
+    float2 r3yz_s = gSMP_0.SampleLevel(gSMP_0Sampler, uv3, 0.0f).xy;
 
     // movc r4.xy, r3.x, r2.xy, r2.xz  → if r3.x: r4=(r2.x,r2.y)=(0.5/W,0); else r4=(r2.x,r2.z)=(0.5/W,-1/H)
     float r2y = 0.0f;
@@ -80,14 +80,13 @@ FIL_OUT_MV FragmentMain(FIL_IN_CB In)
 
     // add r0.xw, r0.xw, v1.xy  → UV + offset
     float2 uv0xw = r0xw + In.UV;
-    // sample t0.xzwy → r0.xw = (t0.x, t0.w) = (r, a)
-    float4 s0xw = gSMP_0.SampleLevel(gSMP_0Sampler, uv0xw, 0.0f);
-    float2 r0xw_s = float2(s0xw.x, s0xw.w);
+    // sample t0.xy → r0.xw = (t0.x, t0.y) per ref
+    float2 r0xw_s = gSMP_0.SampleLevel(gSMP_0Sampler, uv0xw, 0.0f).xy;
 
     // add r0.yz, r0.yz, v1.xy
     float2 uv0yz = r0yz + In.UV;
-    // sample t0.zxyw → r0.yz = (t0.z, t0.x)
-    float2 r0yz_s = gSMP_0.SampleLevel(gSMP_0Sampler, uv0yz, 0.0f).zx;
+    // sample t0.xy → r0.yz = (t0.x, t0.y) per ref
+    float2 r0yz_s = gSMP_0.SampleLevel(gSMP_0Sampler, uv0yz, 0.0f).xy;
 
     // add r2.xy, r4.xy, v1.xy
     float2 uv2 = r4xy + In.UV;
@@ -108,9 +107,9 @@ FIL_OUT_MV FragmentMain(FIL_IN_CB In)
     float2 mvAvg = mvSum * float2(0.25f, -0.25f);
 
     // Depth: ldms t1 with checkerboard sample index
-    // ASM: ldms_indexable t1.yzxw → r1.z, so depth = t1.Load().y
+    // ref: r1.z = Load(r1.xz, r3.x).x → depth = .x (R)
     uint halfX = r1yz.x >> 1u;
-    float depth = gSMP_Depth1MS.Load(uint2(halfX, r1yz.y), r3x).g;
+    float depth = gSMP_Depth1MS.Load(uint2(halfX, r1yz.y), r3x).x;
 
     // Linearize depth
     float r0w2 = depth * gFC_CameraParam.z + gFC_CameraParam.y;

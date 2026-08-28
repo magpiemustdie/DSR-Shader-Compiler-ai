@@ -9,7 +9,7 @@
 struct FIL_IN_MSAA
 {
     float4 Pos : SV_Position;
-    float4 UV  : TEXCOORD1; // xy=UV0, zw=UV1
+    float4 UV  : TEXCOORD0; // xy=UV0, zw=UV1
 };
 
 struct FIL_OUT

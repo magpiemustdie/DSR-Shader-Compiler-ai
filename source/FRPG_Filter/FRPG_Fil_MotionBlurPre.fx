@@ -41,17 +41,29 @@
 
 // t0 = velocity buffer (= gSMP_0 from Common), t1 = depth buffer (= gSMP_1 from Common)
 
-float4 gFC_MotionParam  : register(c57); // x:scaleX, y:scaleY, z:normScale
-float4 gFC_InvVP0       : register(c58);
-float4 gFC_InvVP1       : register(c59);
-float4 gFC_InvVP2       : register(c60);
-float4 gFC_InvVP3       : register(c61);
-float4 gFC_PrevVP0      : register(c74);
-float4 gFC_PrevVP1      : register(c75);
-float4 gFC_PrevVP3      : register(c77);
-float4 gFC_CamOffset    : register(c78);
+// Extended registers — exact reference names/layout ($Globals, c54-c87)
+float4               DL_FREG_054        : register(c54); // [unused]
+float4               DL_FREG_055        : register(c55); // [unused]
+float4               DL_FREG_056        : register(c56); // [unused]
+float4               DL_FREG_057        : register(c57);  // x:scaleX, y:scaleY, z:normScale
+float4x4             DL_FREG_058        : register(c58);  // InvViewProj rows c58-c61
+float4x4             DL_FREG_062        : register(c62); // [unused]
+float4               DL_FREG_066        : register(c66); // [unused]
+float4               DL_FREG_067        : register(c67); // [unused]
+float4               DL_FREG_068        : register(c68); // [unused]
+float4               DL_FREG_069        : register(c69); // [unused]
+float4               DL_FREG_070        : register(c70); // [unused]
+float4               DL_FREG_071        : register(c71); // [unused]
+float4               DL_FREG_072        : register(c72); // [unused]
+float4               DL_FREG_073        : register(c73); // [unused]
+float4x4             DL_FREG_074        : register(c74);  // PrevViewProj rows c74-c77
+float4               DL_FREG_078        : register(c78);  // camera world position
+uint4                gFC_FrameIndex     : register(c81); // [unused]
+float4x4             gVC_WorldViewClipMtx : register(c82); // [unused]
+float4               gVC_ScreenSize     : register(c86); // [unused]
+float4               gVC_NoiseParam     : register(c87); // [unused]
 
-struct FIL_IN_MV  { float4 Pos : SV_Position; float2 UV : TEXCOORD1; };
+struct FIL_IN_MV  { float4 Pos : SV_Position; float2 UV : TEXCOORD0; };
 struct FIL_OUT_MV { float2 o0 : SV_Target0; };
 
 FIL_OUT_MV FragmentMain(FIL_IN_MV In)
@@ -70,23 +82,16 @@ FIL_OUT_MV FragmentMain(FIL_IN_MV In)
     float4 r0 = float4(ndc, depth, 1.0f);
 
     // Unproject to world space
-    float4 r1;
-    r1.x = dot(r0, gFC_InvVP0);
-    r1.y = dot(r0, gFC_InvVP1);
-    r1.z = dot(r0, gFC_InvVP2);
-    float  r0x = dot(r0, gFC_InvVP3);
-    float3 worldPos = r1.xyz / r0x;
+    float4 r1 = mul(r0, DL_FREG_058);
+    float3 worldPos = r1.xyz / r1.w;
 
     // Add camera offset
-    worldPos += gFC_CamOffset.xyz;
+    worldPos += DL_FREG_078.xyz;
 
     // Project to previous frame
     float4 wp = float4(worldPos, 1.0f);
-    float2 prevClipXY;
-    prevClipXY.x = dot(wp, gFC_PrevVP0);
-    prevClipXY.y = dot(wp, gFC_PrevVP1);
-    float  prevClipW = dot(wp, gFC_PrevVP3);
-    float2 prevUV = prevClipXY / prevClipW * float2(0.5f, -0.5f) + 0.5f;
+    float4 prevClip = mul(wp, DL_FREG_074);
+    float2 prevUV = prevClip.xy / prevClip.w * float2(0.5f, -0.5f) + 0.5f;
 
     // Reprojection motion vector
     float2 mv = In.UV - prevUV;
@@ -103,8 +108,8 @@ FIL_OUT_MV FragmentMain(FIL_IN_MV In)
     // Normalize and scale
     // ASM: mul r0.xy, r0.zzzz, r0.xyxx  → norm * mvFinal (norm first)
     float lenSq = dot(mvFinal, mvFinal);
-    float norm  = saturate(rsqrt(lenSq) * gFC_MotionParam.z);
-    float2 mvNorm = mvFinal * norm * gFC_MotionParam.xy;
+    float norm  = saturate(rsqrt(lenSq) * DL_FREG_057.z);
+    float2 mvNorm = mvFinal * norm * DL_FREG_057.xy;
     float  mvLen  = sqrt(dot(mvNorm, mvNorm));
 
     Out.o0.x = 1.0f / mvLen;

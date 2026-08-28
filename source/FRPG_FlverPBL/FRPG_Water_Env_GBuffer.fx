@@ -18,7 +18,7 @@ float4 FragmentMain(
 ) : SV_Target0
 {
     float4 r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12;
-    precise float avgHeight = 0;
+    float avgHeight = 0;
     float3 fogBase = float3(1, 1, 1);
     float _shadowPCF = 0;
 

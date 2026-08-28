@@ -7,6 +7,11 @@
 static const uint4 gFC_DebugDraw = 0;
 #include "FRPG_Common.fxh"
 
+// ref Sfx base RDEF carries a [unused] float4[6] @c249 named VR_249A
+// (clip-plane array; FromSoft VC header declared the raw VR_ name);
+// declare to match metadata.
+uniform float4 VR_249A[6]; // [unused]
+
 float3 srgb_encode(float3 c) { return pow(abs(c), 1.0f / 2.2f); }
 float3 srgb_decode(float3 c) { return pow(abs(c), 2.2f); }
 
@@ -17,65 +22,83 @@ float3 srgb_decode(float3 c) { return pow(abs(c), 2.2f); }
 // variants (Sdw/Csd/Lit defines do not change the code).
 GBUFFER_OUT FragmentMain(VTX_OUT In)
 {
-    float3 tcCol = float3(1.0f, 1.0f, 0.0f) * gFC_ToneCorrectParams.x;
+    float3 tcCol = float3(1.0f, 0.0f, 1.0f) * gFC_ToneCorrectParams.x;
     if (asint(gFC_PostEffectScale.x) != 0)
     {
-        float3 r2 = float3(gFC_AdaptParam.z * gFC_fMiddleGray.w,
-                           gFC_AdaptParam.w * gFC_fMiddleGray.w,
-                           gFC_AdaptParam.z * gFC_fMiddleGray.y);
-        float3 r3 = float3(gFC_fMiddleGray.y * gFC_fMiddleGray.z,
-                           gFC_fMiddleGray.y * gFC_fMiddleGray.w,
-                           gFC_fMiddleGray.x * gFC_fMiddleGray.y);
-        float r2w1 = gFC_fMiddleGray.x * gFC_AdaptParam.y + r3.x;
-        float r2x1 = gFC_AdaptParam.y * r2w1 + r2.x;
-        float r2w2 = gFC_fMiddleGray.x * gFC_AdaptParam.y + gFC_fMiddleGray.y;
-        float r2y1 = gFC_AdaptParam.y * r2w2 + r2.y;
-        float r2x2 = r2x1 / r2y1;
-        float r2y2 = gFC_AdaptParam.z / gFC_AdaptParam.w;
-        float r2x3 = r2x2 - r2y2;
-        float r4x = r2x3 * saturate(tcCol.x);
-        float r5x = r4x * r4x - r4x;
-        r5x *= gFC_fMiddleGray.x * gFC_fMiddleGray.w;
-        float r2y3 = gFC_AdaptParam.w * gFC_AdaptParam.w;
-        r5x *= r2y3 * gFC_AdaptParam.w;
-        float r2w4x = r3.y * (gFC_AdaptParam.z * gFC_AdaptParam.w);
-        r5x = r5x * (-4.0f) + r2w4x;
-        float r2w5x = r3.y * gFC_fMiddleGray.z;
-        float r6xx = r3.y * r4x;
-        float r7xx = r3.y * gFC_fMiddleGray.z - r6xx;
-        r7xx *= gFC_AdaptParam.z;
-        float dp2x = 2.0f * r7xx * gFC_AdaptParam.w;
-        float r3y1x = r5x - dp2x;
-        float r8xx = r2w5x * gFC_fMiddleGray.z - 2.0f * r2w5x * r4x;
-        float r2w6x = r3.z * gFC_AdaptParam.z * 4.0f;
-        r8xx = -r2w6x * r4x + r8xx;
-        r6xx = r6xx * r4x + r8xx;
-        float r2w7x = r2y3 * r6xx + r3y1x;
-        float r2zInitx = gFC_AdaptParam.z * gFC_fMiddleGray.y;
-        float r3xzxx = gFC_fMiddleGray.y * (gFC_fMiddleGray.z - r4x);
-        r3xzxx = -r3xzxx * gFC_AdaptParam.w + r2zInitx;
-        float sqrtX = sqrt(r2w7x);
-        float root1X = -0.5f * (sqrtX + r3xzxx);
-        float r8yx = saturate(tcCol.x) * r2x3 - 1.0f;
-        float r4zx = gFC_AdaptParam.w * gFC_fMiddleGray.x * r8yx + gFC_AdaptParam.z * gFC_fMiddleGray.x;
-        float root2X = -0.5f * (-sqrtX + r3xzxx);
-        float divX1 = root1X / r4zx;
-        float divX2 = root2X / r4zx;
-        float maxRootX = max(max(divX1, divX2), 0.0f);
-        float r8rX = (r2w7x >= 0.0f) ? maxRootX : 0.0f;
+        // Exact transcription of ref ReverseToneMap (Sfx base asm, if_nz cb0[208].x block).
+        // C = gFC_AdaptParam (cb206), M = gFC_fMiddleGray (cb207).
+        float Cy = gFC_AdaptParam.y, Cz = gFC_AdaptParam.z, Cw = gFC_AdaptParam.w;
+        float Mx = gFC_fMiddleGray.x, My = gFC_fMiddleGray.y,
+              Mz = gFC_fMiddleGray.z, Mw = gFC_fMiddleGray.w;
 
-        float r2w7y = r2y3 * r7xx + (r2w4x - 2.0f * r2w5x * gFC_AdaptParam.z * gFC_AdaptParam.w);
-        float r3xzxy = gFC_fMiddleGray.y * gFC_AdaptParam.z - r3.x * gFC_AdaptParam.w;
-        float r4zy = gFC_fMiddleGray.x * (gFC_AdaptParam.z - gFC_AdaptParam.w);
-        float sqrtY = sqrt(r2w7y);
-        float root1Y = -0.5f * (sqrtY + r3xzxy);
-        float root2Y = -0.5f * (-sqrtY + r3xzxy);
-        float divY1 = root1Y / r4zy;
-        float divY2 = root2Y / r4zy;
-        float maxRootY = max(max(divY1, divY2), 0.0f);
-        float r8rY = (r2w7y >= 0.0f) ? maxRootY : 0.0f;
+        float3 colLin = saturate(tcCol);
 
-        float3 r8final = float3(r8rX, r8rY, r8rX);
+        float r1z = Cw * Cw;
+        float r1w = Cz * My;
+        float r3x = My * Mz;
+        float r3y = My * Mw;
+        float r3z = Mx * Mz;
+
+        // k = [Cy*(Mx*Cy + My*Mz) + Cz*Mw] / [Cy*(Mx*Cy + My) + Cw^2] - Cz/Cw
+        float kk = Cy * (Mx * Cy + r3x) + Cz * Mw;
+        float den = Cy * (Mx * Cy + My) + r1z;
+        kk = kk / den - Cz / Cw;
+
+        float3 r4 = kk * colLin;
+        float3 r5 = r4 * r4 - r4;
+        r5 *= Mx * Mw;
+        r5 *= Cw * Cw;
+        r5 *= Cw;
+
+        float E = r3y * Mz;
+        float3 r6 = r3y * r4;
+        float3 r7 = (E - r6) * Cz;
+        float discX = r5.x - 2.0f * r7.x * Cw;   // ref dp2 doubles the product
+        float twoE = E + E;
+        float3 r8a = r4 * twoE;
+        r8a = E * Mz - r8a;
+        float F = r3z * Cz * 4.0f;
+        r8a = -F * r4 + r8a;
+        r6 = r6 * r4 + r8a;
+        float czw = Cz / Cw;
+        float numX = czw * r6.x + discX;
+        bool geX = numX >= 0.0f;
+
+        float tA = r3x - My * r4.x;
+        float Ax = -tA * Cw + r1w;
+        float tAw = r3x - My * r4.z;
+        float Aw = -tAw * Cw + r1w;
+
+        float sqX = sqrt(numX);
+        float dX = Cw * Mx, Dy = Cz * Mx;
+        float3 r8s = colLin * kk - 1.0f;
+        float divX = dX * r8s.x + Dy;
+        float root1X = -0.5f * (sqX + Ax);
+        float root2X = -0.5f * (-sqX + Ax);
+        float oX = max(max(root1X / divX, root2X / divX), 0.0f);
+        oX = geX ? oX : 0.0f;
+
+        float discY = r5.y - 2.0f * r7.y * Cw;
+        float numY = czw * r6.y + discY;
+        bool geY = numY >= 0.0f;
+        float sqY = sqrt(numY);
+        float divY = dX * r8s.y + Dy;
+        float root1Y = -0.5f * (sqY + Ax);
+        float root2Y = -0.5f * (-sqY + Ax);
+        float oY = max(max(root1Y / divY, root2Y / divY), 0.0f);
+        oY = geY ? oY : 0.0f;
+
+        float discZ = r5.z - 2.0f * r7.z * Cw;
+        float numZ = czw * r6.z + discZ;
+        bool geZ = numZ >= 0.0f;
+        float sqZ = sqrt(numZ);
+        float divZ = dX * r8s.z + Dy;
+        float root1Z = -0.5f * (sqZ + Aw);
+        float root2Z = -0.5f * (-sqZ + Aw);
+        float oZ = max(max(root1Z / divZ, root2Z / divZ), 0.0f);
+        oZ = geZ ? oZ : 0.0f;
+
+        float3 r8final = float3(oX, oY, oZ);
         float lumSample = tex2D(gSMP_LumTex, float2(0.5f, 0.5f)).r;
         float expScale = clamp(lumSample, gFC_PostEffectScale.z, gFC_PostEffectScale.w);
         expScale = expScale + 0.0001f;
@@ -90,8 +113,11 @@ GBUFFER_OUT FragmentMain(VTX_OUT In)
 #else
 GBUFFER_OUT FragmentMain(VTX_OUT In)
 {
-    float3 V = In.VecEye.xyz;
-    float dist = In.VecEye.w;
+    // ref front block (Sfx base asm 0-2): dist = length(VecEye.xyz),
+    // V = VecEye.xyz / dist — TEXCOORD3.w is never read
+    float3 eyeVec = In.VecEye.xyz;
+    float  dist   = length(eyeVec);
+    float3 V      = eyeVec / dist;
     float3 worldPos = In.VtxWld.xyz;
 
 #if defined(WITH_MultiTexture)
@@ -110,7 +136,7 @@ GBUFFER_OUT FragmentMain(VTX_OUT In)
     float3 B = cross(wN, T) * In.VecTan.w;
     if (gFC_ParallaxParams.x > 0.0f)
     {
-        difTexUV.xy = ParallaxOcclusionMappingSingle(difTexUV.xy, gFC_ParallaxParams.x, In.VecEye.xyz, T, B, wN);
+        difTexUV.xy = ParallaxOcclusionMappingSingle(difTexUV.xy, gFC_ParallaxParams.x, V, T, B, wN);
     }
 #   if defined(WITH_MultiTexture)
     float3 vecTan = normalize(In.VecTan.yzx);
@@ -137,9 +163,23 @@ GBUFFER_OUT FragmentMain(VTX_OUT In)
     float3 N = ApplyDetailBump(difTexUV.xy, wN);
 #endif
 
+#if defined(WITH_MultiTexture)
+    // ref FRPG_FS_HemEnv_Base.fxh L814: second diffuse layer t3 (DiffuseMap2,
+    // UV = TEXCOORD6.zw); FgSkinAddColor goes on the SECOND sample BEFORE the
+    // lerp (first sample stays raw); rgb lerped by COLOR0.a, then x COLOR0.rgb,
+    // alpha forced to 1 before ModelMulCol
+    float4 sampledColor  = TexDiff(difTexUV.xy);
+    float4 sampledColor2 = TexDiff2(difTexUV.zw);
+    sampledColor2.rgb += gFC_FgSkinAddColor.rgb;
+    sampledColor.rgb = In.ColVtx.a * (sampledColor2.rgb - sampledColor.rgb) + sampledColor.rgb;
+    sampledColor.rgb *= In.ColVtx.rgb;
+    sampledColor.a = 1.0f;
+    sampledColor *= gFC_ModelMulCol;
+#else
     float4 sampledColor = TexDiff(difTexUV.xy);
     sampledColor.rgb += gFC_FgSkinAddColor.rgb;
     sampledColor *= In.ColVtx * gFC_ModelMulCol;
+#endif
     sampledColor = qlocDoAlphaTest(sampledColor);
 
     float3 diffCol;
@@ -448,7 +488,7 @@ GBUFFER_OUT FragmentMain(VTX_OUT In)
 
     if (asint(gFC_PostEffectScale.x) != 0)
     {
-        float3 r1 = saturate(tcCol);
+        float3 r1 = tcCol; // ref does NOT saturate before ReverseToneMap
         float3 r2 = float3(gFC_AdaptParam.z * gFC_fMiddleGray.w,
                            gFC_AdaptParam.w * gFC_fMiddleGray.w,
                            gFC_AdaptParam.z * gFC_fMiddleGray.y);

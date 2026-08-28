@@ -1,12 +1,18 @@
-// FRPG_Fil_FxAA2_High.fx
-// Identical DXBC to FRPG_Fil_FxAA2.fx in DSR — same shader, different name.
-// See FRPG_Fil_FxAA2.fx for full implementation.
+// FRPG_Fil_FxAA2.fx
+// Rewritten directly from translated HLSL (FRPG_Fil_FxAA2.fpo.translated.hlsl)
+// Full FXAA 2.0 with iterative edge search (4 passes: 1.5, 2, 4, 12 steps).
+// t0=scene (luma in .y), cb0[12]=ScreenSize (zw=1/size)
+//
+// Key ASM details:
+//   gather4 s0.y = gather GREEN channel only
+//   gather4_aoffimmi(-1,-1) t0.xzwy = gather with offset, swizzle result
+//   sample_l_aoffimmi(1,-1) t0.xzwy = sample with texel offset
+//   sample_l_aoffimmi(-1,1) t0.yxzw = sample with texel offset, swap xy
 
 #include "FRPG_Fil_Common.fxh"
 
 struct FIL_OUT { float4 Color : SV_Target0; };
 
-// Forward declaration — implementation is identical to FxAA2
 FIL_OUT FragmentMain(FIL_IN In)
 {
     FIL_OUT Out;
@@ -15,9 +21,12 @@ FIL_OUT FragmentMain(FIL_IN In)
     float4 r0 = 0, r1 = 0, r2 = 0, r3 = 0, r4 = 0, r5 = 0;
 
     r0.xyzw = gSMP_0.SampleLevel(gSMP_0Sampler, v1, 0.0f);
+
+    // gather4 green channel — s0.y means gather .y (green)
     r1.xyz = gSMP_0.GatherGreen(gSMP_0Sampler, v1).xyz;
+    // gather4_aoffimmi(-1,-1) t0.xzwy — gather green with offset, swizzle xzwy
     float4 g2 = gSMP_0.GatherGreen(gSMP_0Sampler, v1, int2(-1,-1));
-    r2.xyz = g2.xzw;
+    r2.xyz = g2.xzw; // swizzle .xzwy → take .x .z .w
 
     r1.w = max(r0.y, r1.x);
     r2.w = min(r0.y, r1.x);
@@ -34,8 +43,11 @@ FIL_OUT FragmentMain(FIL_IN In)
 
     if (r2.w)
     {
-        r2.w = gSMP_0.SampleLevel(gSMP_0Sampler, v1, 0.0f, int2(1,-1)).x;
+        // sample_l_aoffimmi(1,-1) t0.xzwy → swizzle puts green in .w, write r2.w
+        r2.w = gSMP_0.SampleLevel(gSMP_0Sampler, v1, 0.0f, int2(1,-1)).xzwy.w;
+        // sample_l_aoffimmi(-1,1) t0.yxzw → sample at offset (-1,1), take .y (green after yxzw)
         r3.x = gSMP_0.SampleLevel(gSMP_0Sampler, v1, 0.0f, int2(-1,1)).y;
+
         r3.yz = float2(r1.x + r2.y, r1.z + r2.x);
         r1.w = 1.0f / r1.w;
         r3.w = r3.z + r3.y;
@@ -75,48 +87,58 @@ FIL_OUT FragmentMain(FIL_IN In)
         r4.xy = -float2(r2.y, r2.w) + r3.yz;
         r5.xy = float2(r2.y, r2.w) + r3.yz;
         r3.y = r1.w * -2.0f + 3.0f;
-        r3.z = gSMP_0.SampleLevel(gSMP_0Sampler, r4.xy, 0.0f).z;
+        // sample_l t0.xzyw → swizzle puts green in .z, write r3.z
+        r3.z = gSMP_0.SampleLevel(gSMP_0Sampler, r4.xy, 0.0f).xzyw.z;
         r1.w = r1.w * r1.w;
-        r3.w = gSMP_0.SampleLevel(gSMP_0Sampler, r5.xy, 0.0f).w;
+        // sample_l t0.xzwy → swizzle puts green in .w, write r3.w
+        r3.w = gSMP_0.SampleLevel(gSMP_0Sampler, r5.xy, 0.0f).xzwy.w;
         r1.x = (r3.x != 0) ? r2.x : r1.x;
         r2.x = r2.z * 0.25f;
-        r2.z = -r1.x * 0.5f + r0.y;
+        r2.z = r0.y - r1.x * 0.5f;
         r1.w = r1.w * r3.y;
         r2.z = (float)(r2.z < 0.0f);
-        r3.x = -r1.x * 0.5f + r3.z;
-        r3.y = -r1.x * 0.5f + r3.w;
+        r3.x = r3.z - r1.x * 0.5f;
+        r3.y = r3.w - r1.x * 0.5f;
         r3.zw = (float2)(abs(r3.xy) >= r2.xx);
-        r4.z = -r2.y * 1.5f + r4.x;
+        r4.z = r4.x - r2.y * 1.5f;
         r4.x = (r3.z != 0) ? r4.x : r4.z;
-        r4.w = -r2.w * 1.5f + r4.y;
+        r4.w = r4.y - r2.w * 1.5f;
         r4.z = (r3.z != 0) ? r4.y : r4.w;
-        r4.yw = asfloat(~asuint(r3.zw));
-        r4.y = asfloat(asuint(r4.w) | asuint(r4.y));
         r4.w = r2.y * 1.5f + r5.x;
         r5.x = (r3.w != 0) ? r5.x : r4.w;
         r4.w = r2.w * 1.5f + r5.y;
         r5.z = (r3.w != 0) ? r5.y : r4.w;
 
-        static const float kSteps[4] = { 1.5f, 2.0f, 4.0f, 12.0f };
+        static const float kSteps[3] = { 2.0f, 4.0f, 12.0f };
         [unroll]
-        for (int iPass = 0; iPass < 4; iPass++)
+        for (int iPass = 0; iPass < 3; iPass++)
         {
+            r4.yw = asfloat(~asuint(r3.zw));
+            r4.y = asfloat(asuint(r4.w) | asuint(r4.y));
             if (r4.y)
             {
-                if (!r3.z) r3.x = gSMP_0.SampleLevel(gSMP_0Sampler, float2(r4.x, r4.z), 0.0f).x;
-                if (!r3.w) r3.y = gSMP_0.SampleLevel(gSMP_0Sampler, float2(r5.x, r5.z), 0.0f).y;
-                float r4y_tmp = -r1.x * 0.5f + r3.x;
+                if (!r3.z)
+                    // t0.yxzw → swizzle puts green in .x, write r3.x
+                    r3.x = gSMP_0.SampleLevel(gSMP_0Sampler, float2(r4.x, r4.z), 0.0f).yxzw.x;
+                if (!r3.w)
+                    // t0.xyzw → green is .y
+                    r3.y = gSMP_0.SampleLevel(gSMP_0Sampler, float2(r5.x, r5.z), 0.0f).y;
+
+                float r4y_tmp = r3.x - r1.x * 0.5f;
                 r3.x = (r3.z != 0) ? r3.x : r4y_tmp;
-                float r3z_tmp = -r1.x * 0.5f + r3.y;
+                float r3z_tmp = r3.y - r1.x * 0.5f;
                 r3.y = (r3.w != 0) ? r3.y : r3z_tmp;
                 r3.zw = (float2)(abs(r3.xy) >= r2.xx);
+
                 float step = kSteps[iPass];
-                float r4y2 = -r2.y * step + r4.x; r4.x = (r3.z != 0) ? r4.x : r4y2;
-                float r4y3 = -r2.w * step + r4.z; r4.z = (r3.z != 0) ? r4.z : r4y3;
-                r4.yw = asfloat(~asuint(r3.zw));
-                r4.y = asfloat(asuint(r4.w) | asuint(r4.y));
-                float r4w2 = r2.y * step + r5.x; r5.x = (r3.w != 0) ? r5.x : r4w2;
-                float r4w3 = r2.w * step + r5.z; r5.z = (r3.w != 0) ? r5.z : r4w3;
+                float r4y2 = r4.x - r2.y * step;
+                r4.x = (r3.z != 0) ? r4.x : r4y2;
+                float r4y3 = r4.z - r2.w * step;
+                r4.z = (r3.z != 0) ? r4.z : r4y3;
+                float r4w2 = r2.y * step + r5.x;
+                r5.x = (r3.w != 0) ? r5.x : r4w2;
+                float r4w3 = r2.w * step + r5.z;
+                r5.z = (r3.w != 0) ? r5.z : r4w3;
             }
         }
 
