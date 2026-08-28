@@ -27,7 +27,6 @@ mtd/
 build/
 docs/
 dsr-shader-mods-vanilla/
-archive_structures.json
 AGENTS.md
 
 # ── tools/ — only fxc_81 and fxc_new are public ─────────────────────────────
