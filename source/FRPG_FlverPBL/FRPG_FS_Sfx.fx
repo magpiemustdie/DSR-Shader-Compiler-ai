@@ -17,97 +17,93 @@ float3 srgb_decode(float3 c) { return pow(abs(c), 2.2f); }
 
 #if defined(WITH_MultiTexture) && !defined(WITH_SpecularMap)
 // ===== Mul-base mini shader (dead code: no MTD uses Mul base variants) =====
-// Reference: ReverseToneMap-only shader, t6 lum sample at (0.5,0.5), o0+o1,
-// cb0[205-208] params, cb0[35] GlowColor. Identical for all 12 Mul/BmpMul base
-// variants (Sdw/Csd/Lit defines do not change the code).
+// Exact transcription of reference 3DMigoto decompile
+// reference/DSR_Windows/FRPG_FlverPBL_fpo_DX11/FRPG_Sfx_Dif___BmpMul______.hlsl
 GBUFFER_OUT FragmentMain(VTX_OUT In)
 {
-    float3 tcCol = float3(1.0f, 0.0f, 1.0f) * gFC_ToneCorrectParams.x;
-    if (asint(gFC_PostEffectScale.x) != 0)
-    {
-        // Exact transcription of ref ReverseToneMap (Sfx base asm, if_nz cb0[208].x block).
-        // C = gFC_AdaptParam (cb206), M = gFC_fMiddleGray (cb207).
-        float Cy = gFC_AdaptParam.y, Cz = gFC_AdaptParam.z, Cw = gFC_AdaptParam.w;
-        float Mx = gFC_fMiddleGray.x, My = gFC_fMiddleGray.y,
-              Mz = gFC_fMiddleGray.z, Mw = gFC_fMiddleGray.w;
-
-        float3 colLin = saturate(tcCol);
-
-        float r1z = Cw * Cw;
-        float r1w = Cz * My;
-        float r3x = My * Mz;
-        float r3y = My * Mw;
-        float r3z = Mx * Mz;
-
-        // k = [Cy*(Mx*Cy + My*Mz) + Cz*Mw] / [Cy*(Mx*Cy + My) + Cw^2] - Cz/Cw
-        float kk = Cy * (Mx * Cy + r3x) + Cz * Mw;
-        float den = Cy * (Mx * Cy + My) + r1z;
-        kk = kk / den - Cz / Cw;
-
-        float3 r4 = kk * colLin;
-        float3 r5 = r4 * r4 - r4;
-        r5 *= Mx * Mw;
-        r5 *= Cw * Cw;
-        r5 *= Cw;
-
-        float E = r3y * Mz;
-        float3 r6 = r3y * r4;
-        float3 r7 = (E - r6) * Cz;
-        float discX = r5.x - 2.0f * r7.x * Cw;   // ref dp2 doubles the product
-        float twoE = E + E;
-        float3 r8a = r4 * twoE;
-        r8a = E * Mz - r8a;
-        float F = r3z * Cz * 4.0f;
-        r8a = -F * r4 + r8a;
-        r6 = r6 * r4 + r8a;
-        float czw = Cz / Cw;
-        float numX = czw * r6.x + discX;
-        bool geX = numX >= 0.0f;
-
-        float tA = r3x - My * r4.x;
-        float Ax = -tA * Cw + r1w;
-        float tAw = r3x - My * r4.z;
-        float Aw = -tAw * Cw + r1w;
-
-        float sqX = sqrt(numX);
-        float dX = Cw * Mx, Dy = Cz * Mx;
-        float3 r8s = colLin * kk - 1.0f;
-        float divX = dX * r8s.x + Dy;
-        float root1X = -0.5f * (sqX + Ax);
-        float root2X = -0.5f * (-sqX + Ax);
-        float oX = max(max(root1X / divX, root2X / divX), 0.0f);
-        oX = geX ? oX : 0.0f;
-
-        float discY = r5.y - 2.0f * r7.y * Cw;
-        float numY = czw * r6.y + discY;
-        bool geY = numY >= 0.0f;
-        float sqY = sqrt(numY);
-        float divY = dX * r8s.y + Dy;
-        float root1Y = -0.5f * (sqY + Ax);
-        float root2Y = -0.5f * (-sqY + Ax);
-        float oY = max(max(root1Y / divY, root2Y / divY), 0.0f);
-        oY = geY ? oY : 0.0f;
-
-        float discZ = r5.z - 2.0f * r7.z * Cw;
-        float numZ = czw * r6.z + discZ;
-        bool geZ = numZ >= 0.0f;
-        float sqZ = sqrt(numZ);
-        float divZ = dX * r8s.z + Dy;
-        float root1Z = -0.5f * (sqZ + Aw);
-        float root2Z = -0.5f * (-sqZ + Aw);
-        float oZ = max(max(root1Z / divZ, root2Z / divZ), 0.0f);
-        oZ = geZ ? oZ : 0.0f;
-
-        float3 r8final = float3(oX, oY, oZ);
-        float lumSample = tex2D(gSMP_LumTex, float2(0.5f, 0.5f)).r;
-        float expScale = clamp(lumSample, gFC_PostEffectScale.z, gFC_PostEffectScale.w);
-        expScale = expScale + 0.0001f;
-        tcCol = expScale * r8final / gFC_AdaptParam.x;
+    float4 r0,r1,r2,r3,r4;
+    r0.xyz = gFC_ToneCorrectParams.xxx * float3(1,1,0);
+    r0.w = (0 != asint(gFC_PostEffectScale.x)) ? 1 : 0;
+    if (r0.w != 0) {
+        r1.xyz = gFC_fMiddleGray.wwy * gFC_AdaptParam.zwz;
+        r2.xyz = gFC_fMiddleGray.zyw * gFC_fMiddleGray.yyx;
+        r0.w = gFC_fMiddleGray.x * gFC_AdaptParam.y + r2.x;
+        r0.w = gFC_AdaptParam.y * r0.w + r1.x;
+        r1.x = gFC_fMiddleGray.x * gFC_AdaptParam.y + gFC_fMiddleGray.y;
+        r1.x = gFC_AdaptParam.y * r1.x + r1.y;
+        r0.w = r0.w / r1.x;
+        r1.x = gFC_AdaptParam.z / gFC_AdaptParam.w;
+        r0.w = -r1.x + r0.w;
+        r0.x = saturate(r0.x);
+        r1.x = r0.x * r0.w;
+        r1.y = r1.x * r1.x + -r1.x;
+        r1.y = gFC_fMiddleGray.x * r1.y;
+        r1.y = gFC_fMiddleGray.w * r1.y;
+        r3.xy = gFC_AdaptParam.wz * gFC_AdaptParam.wz;
+        r1.y = r3.x * r1.y;
+        r1.y = gFC_AdaptParam.w * r1.y;
+        r1.w = r3.y * r2.y;
+        r1.y = r1.y * -4 + r1.w;
+        r1.w = gFC_fMiddleGray.z * r2.y;
+        r2.w = r2.y * r1.x;
+        r3.z = r2.y * gFC_fMiddleGray.z + -r2.w;
+        r3.z = gFC_AdaptParam.z * r3.z;
+        r3.z = dot(r3.zz, gFC_AdaptParam.ww);
+        r1.y = -r3.z + r1.y;
+        r3.z = gFC_fMiddleGray.z * r1.w;
+        r3.w = dot(r1.ww, r1.xx);
+        r3.w = r1.w * gFC_fMiddleGray.z + -r3.w;
+        r4.xy = gFC_AdaptParam.zw * r2.zx;
+        r2.z = r4.x * r1.x;
+        r2.z = -r2.z * 4 + r3.w;
+        r2.z = r2.w * r1.x + r2.z;
+        r1.y = r3.x * r2.z + r1.y;
+        r2.z = (r1.y >= 0) ? 1 : 0;
+        r1.x = -gFC_fMiddleGray.y * r1.x + r2.x;
+        r1.x = -r1.x * gFC_AdaptParam.w + r1.z;
+        r1.y = sqrt(r1.y);
+        r1.z = r1.x + r1.y;
+        r1.z = -0.5 * r1.z;
+        r2.xw = gFC_fMiddleGray.xx * gFC_AdaptParam.wz;
+        r0.w = r0.x * r0.w + -1;
+        r0.w = r2.x * r0.w + r2.w;
+        r1.z = r1.z / r0.w;
+        r1.x = r1.x + -r1.y;
+        r1.x = -0.5 * r1.x;
+        r0.w = r1.x / r0.w;
+        r0.w = max(r1.z, r0.w);
+        r0.w = max(0, r0.w);
+        r1.xz = r2.zz ? r0.ww : 0;
+        r0.w = gFC_AdaptParam.z * r1.w;
+        r0.w = dot(r0.ww, gFC_AdaptParam.ww);
+        r0.w = r3.y * r2.y + -r0.w;
+        r0.w = r3.x * r3.z + r0.w;
+        r1.w = (r0.w >= 0) ? 1 : 0;
+        r2.y = gFC_fMiddleGray.y * gFC_AdaptParam.z + -r4.y;
+        r0.w = sqrt(r0.w);
+        r2.z = r2.y + r0.w;
+        r2.z = -0.5 * r2.z;
+        r2.x = gFC_fMiddleGray.x * gFC_AdaptParam.z + -r2.x;
+        r2.z = r2.z / r2.x;
+        r0.w = r2.y + -r0.w;
+        r0.w = -0.5 * r0.w;
+        r0.w = r0.w / r2.x;
+        r0.w = max(r2.z, r0.w);
+        r0.w = max(0, r0.w);
+        r1.y = r1.w ? r0.w : 0;
+        r0.w = gSMP_6.Sample(gSMP_6Sampler, float2(0.5,0.5)).x;
+        r0.w = max(gFC_PostEffectScale.z, r0.w);
+        r0.w = min(gFC_PostEffectScale.w, r0.w);
+        r0.w = 9.99999975e-005 + r0.w;
+        r1.xyz = r1.xyz * r0.www;
+        r0.xyz = r1.zxy / gFC_AdaptParam.xxx;
     }
-
+    r1.xyzw = gFC_GlowColor.xyzw * float4(1,0,1,1);
+    r0.w = min(gFC_ToneCorrectParams.x, 1);
     GBUFFER_OUT Out;
-    Out.GBuffer0 = float4(tcCol, 1.0f);
-    Out.GBuffer1 = float4(1.0f, 0.0f, 1.0f, 1.0f) * gFC_GlowColor * min(1.0f, gFC_ToneCorrectParams.x);
+    Out.GBuffer1 = r1.xyzw * r0.wwww;
+    Out.GBuffer0.xyz = r0.yzx;
+    Out.GBuffer0.w = 1;
     return Out;
 }
 #else

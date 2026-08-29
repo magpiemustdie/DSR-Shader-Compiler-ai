@@ -52,3 +52,7 @@ __pycache__/
 
 # ── Makefile is internal (references local paths) ────────────────────────────
 Makefile
+
+# -- PTDE isolated decompilation (not part of DSR build) -----------------------
+SourcePTDE/
+SourcePTDE-*/

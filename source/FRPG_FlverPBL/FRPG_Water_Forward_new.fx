@@ -82,17 +82,19 @@ WATER_OUT FragmentMain_WaterBody(WATER_IN_BASE In)
     r1.w = gFC_WaterFresnelScale * r1.w;
     r0.w = r0.w + r0.w;
     r3.xyz = r0.www * r1.xyz + -r2.xyz;
+    float3 finalWaveN = r1.xyz;
 
     // ---- refraction band UVs ----
-    r4.xyzw = gFC_WaterRefractBand * r1.xzxz;
+    r4.xyzw = gFC_WaterRefractBand * finalWaveN.xzxz;
     r4.xyzw = In.ColVtx.wwww * r4.xyzw;
 
 #ifdef WATER_ENV
     // ---- CUBE environment reflection ----
     r1.xyz = gSMP_12_CUBE.Sample(gSMP_12_CUBESampler, r3.xyz).xyz;
 #else
-    // ---- screen-space reflection through t0 ----
-    r1.xy = r3.xz * gFC_WaterReflectBand + r0.xz;
+    // ---- screen-space reflection through t0 (ref: N.xz*Band + (SAO.x*pos.x, 1-SA0.y*pos.y)) ----
+    float2 reflBase = float2(r0.x, 1.0f - r0.y);
+    r1.xy = finalWaveN.xz * gFC_WaterReflectBand + reflBase;
     r1.xyz = gSMP_0.Sample(gSMP_0Sampler, r1.xy).xyz;
 #endif
 
@@ -151,11 +153,11 @@ WATER_OUT FragmentMain_WaterBody(WATER_IN_BASE In)
     float2 uva = -lo * sw + float2(su, sv);
     float2 hiM = (cl.z < uva.x && cl.w < uva.y) ? float2(1, 1) : float2(0, 0);
     float2 uvb = hiM * sw + uva;
-    float ndl = dot(gFC_ShadowLightDir.xyz, nA);
+    float ndl = dot(gFC_ShadowLightDir.xyz, finalWaveN);
     float biasTerm = gFC_ShadowMapParam.x + ndl;
     float depthTerm = gFC_ShadowMapParam.y + -sd;
     float2 bz = saturate(gFC_ShadowMapParam.wz * float2(biasTerm, depthTerm));
-    float3 suvd = float3(uvb, sw) / sw;
+    float3 suvd = float3(uvb, sd) / sw;
     float t0c = gSMP_7.SampleCmp(gSMP_7Sampler, suvd.xy, suvd.z, int2(-1, -1)).x;
     float t1c = gSMP_7.SampleCmp(gSMP_7Sampler, suvd.xy, suvd.z, int2(0, -1)).x;
     float t2c = gSMP_7.SampleCmp(gSMP_7Sampler, suvd.xy, suvd.z, int2(1, -1)).x;
